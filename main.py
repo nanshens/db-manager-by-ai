@@ -13,6 +13,7 @@ from PySide6.QtGui import QFont
 from app.bootstrap import bootstrap
 from app.ui import i18n, theme as theme_mod
 from app.ui.main_window import MainWindow
+from app.ui.native_chrome import apply_titlebar_theme
 from app import config as app_config
 
 
@@ -54,6 +55,7 @@ def main() -> int:
     def on_theme_change(theme: str) -> None:
         theme_mod.apply_theme(app, theme)
         win.set_theme_external(theme)
+        apply_titlebar_theme(win, theme)  # 同步原生标题栏
         app_config.set_theme(theme)
 
     def on_lang_change(lang: str) -> None:
@@ -66,6 +68,7 @@ def main() -> int:
 
     # 7) 显示
     win.show()
+    apply_titlebar_theme(win, init_theme)  # 启动时把原生标题栏染深/染浅
 
     return app.exec()
 
