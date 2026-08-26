@@ -5,6 +5,7 @@ from .sqllib_page import SqlLibPage
 from .excel_templates_page import ExcelTemplatesPage
 from .settings_page import SettingsPage
 from .project_detail_page import ProjectDetailPage
+from .file_convert_page import FileConvertPage
 
 __all__ = [
     "BasePage",
@@ -13,4 +14,5 @@ __all__ = [
     "ExcelTemplatesPage",
     "SettingsPage",
     "ProjectDetailPage",
+    "FileConvertPage",
 ]

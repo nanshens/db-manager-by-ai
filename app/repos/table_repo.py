@@ -133,3 +133,8 @@ class TableRepo:
     def delete(self, table_id: int) -> None:
         with transaction(self.db_path) as conn:
             conn.execute("DELETE FROM db_table WHERE id = ?", (table_id,))
+
+    def delete_by_project(self, project_id: int) -> int:
+        with transaction(self.db_path) as conn:
+            cur = conn.execute("DELETE FROM db_table WHERE project_id = ?", (project_id,))
+            return cur.rowcount

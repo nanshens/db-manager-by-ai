@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path('.').resolve()))
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import QApplication
 
 from app.bootstrap import bootstrap
@@ -209,10 +209,48 @@ def main():
     grab(dlg, "14_import_sql_paste")
     dlg.close()
 
-    # Detail page - sqlgen tab
+    # New Version Dialog(多表)— 验证加大后的效果
+    from app.ui.dialogs import NewVersionDialog
+    tables_in_proj = reg().table_service.list_by_project(p1.id)
+    vdlg = NewVersionDialog(tables=tables_in_proj, default_version_name="v1.0", parent=win)
+    QApplication.processEvents()
+    grab(vdlg, "15_new_version_dialog")
+    vdlg.close()
+
+    # File Convert 页面(切回去)— 移到 grab 后面再切
+    win._switch_page(PageId.FILE_CONVERT)
+    QApplication.processEvents()
+    # 在源文件里写一个 demo tsv
+    sample_tsv = os.path.join(os.environ.get('TEMP', '.'), f'dbmanager_fc_{os.getpid()}', 'demo.tsv')
+    os.makedirs(os.path.dirname(sample_tsv), exist_ok=True)
+    with open(sample_tsv, 'wb') as f:
+        f.write(b'name\tage\tcity\nAlice\t30\tNY\nBob\t25\tLA\n"Smith, John"\t40\t"Boston, MA"\n')
+    win.file_convert_page.src_edit.setText(sample_tsv)
+    win.file_convert_page._on_preview()
+    QApplication.processEvents()
+    grab(win, "17_file_convert_preview")
+    # 这张要重新切回 projects 才能继续(防止 16 没单独截到)
+    win._switch_page(PageId.PROJECTS)
+
+    # Detail page - sqlgen tab — 必须重新 _open_project 才会显示详情页
+    win._open_project(p1.id)
     win.project_detail_page.tabs.setCurrentIndex(2)
+    # 勾两张表演示选中态
+    sqlgen = win.project_detail_page.sqlgen_tab
+    for i in range(sqlgen.table_list.count()):
+        sqlgen.table_list.item(i).setCheckState(Qt.CheckState.Checked)
     QApplication.processEvents()
     grab(win, "12_detail_sqlgen")
+    # 取消勾选,恢复默认
+    for i in range(sqlgen.table_list.count()):
+        sqlgen.table_list.item(i).setCheckState(Qt.CheckState.Unchecked)
+    # 关掉详情页回项目页
+    win._switch_page(PageId.PROJECTS)
+
+    # File Convert 页面
+    win._switch_page(PageId.FILE_CONVERT)
+    QApplication.processEvents()
+    grab(win, "16_file_convert")
 
     QTimer.singleShot(100, app.quit)
     return app.exec()

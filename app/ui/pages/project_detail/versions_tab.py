@@ -89,13 +89,14 @@ class VersionsTab(QWidget):
         act_row.addWidget(self.del_btn)
         rl.addLayout(act_row)
 
-        # Empty state
+        # Empty state — 纯展示,按钮走工具栏(避免重复)
         self.empty = EmptyState(
             icon_name="mdi6.package-variant",
             title=tr("versions_tab.empty.title"),
             description=tr("versions_tab.empty.desc"),
-            primary_text=tr("versions_tab.new_version"),
+            primary_text="",
         )
+        # 即便没按钮,连一下信号保持兼容
         self.empty.primary_clicked.connect(self._on_new)
 
         # Splitter assignment

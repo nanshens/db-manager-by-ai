@@ -50,7 +50,21 @@ class TablesTab(QWidget):
         self.import_btn.clicked.connect(self._on_import_sql)
         tb.addWidget(self.import_btn)
 
+        # 计数(共 N 张)— 显示在工具栏右侧
+        self.count_label = QLabel("")
+        self.count_label.setObjectName("Muted")
+        self.count_label.setStyleSheet("font-size: 12px;")
+        tb.addWidget(self.count_label)
+
         tb.addStretch()
+
+        # 删除全部(危险操作,放最后,字体略小,带确认弹窗)
+        self.del_all_btn = QPushButton(tr("tables_tab.delete_all"))
+        self.del_all_btn.setObjectName("Ghost")
+        self.del_all_btn.setIcon(qta.icon("mdi6.trash-can-outline", color="#ef4444"))
+        self.del_all_btn.clicked.connect(self._on_delete_all)
+        tb.addWidget(self.del_all_btn)
+
         layout.addWidget(toolbar)
 
         # Splitter: 左表列表 / 右表详情
@@ -119,13 +133,14 @@ class TablesTab(QWidget):
         self._sql_highlighter = SqlHighlighter(self.ddl_view.document())
         self._right_layout.addWidget(self.ddl_view, 1)
 
-        # Empty state for right
+        # Empty state for right — 纯展示,无按钮(新建走工具栏)
         self.empty = EmptyState(
             icon_name="mdi6.table",
             title=tr("tables_tab.empty.title"),
             description=tr("tables_tab.empty.desc"),
-            primary_text=tr("tables_tab.add_table"),
+            primary_text="",  # 不显示按钮
         )
+        # 即便没按钮,连一下信号也兼容
         self.empty.primary_clicked.connect(self._on_add)
         self._right_layout.addWidget(self.empty)
         self.empty.hide()
@@ -147,6 +162,7 @@ class TablesTab(QWidget):
         self.add_btn.setText(tr("tables_tab.add_table"))
         self.import_btn.setText(tr("action.import"))
         self.import_btn.setToolTip(tr("dlg.import_sql.title"))
+        self.del_all_btn.setText(tr("tables_tab.delete_all"))
         if self._current_table:
             self._show_detail(self._current_table)
         else:
@@ -163,6 +179,9 @@ class TablesTab(QWidget):
             return
         self.table_list.clear()
         tables = reg().table_service.list_by_project(self._project_id)
+        # 更新计数
+        n = len(tables)
+        self.count_label.setText(tr("tables_tab.total_count").format(n=n))
         if not tables:
             self.empty.show()
             self.detail_header.hide()
@@ -249,6 +268,28 @@ class TablesTab(QWidget):
                 self.refresh()
             except Exception as e:
                 QMessageBox.warning(self, tr("common.error"), str(e))
+
+    def _on_delete_all(self) -> None:
+        if self._project_id is None:
+            return
+        tables = reg().table_service.list_by_project(self._project_id)
+        if not tables:
+            show_toast(tr("tables_tab.delete_all.empty"), "info")
+            return
+        n = len(tables)
+        if QMessageBox.question(
+            self,
+            tr("tables_tab.delete_all.title"),
+            tr("tables_tab.delete_all.msg").format(n=n),
+        ) != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            reg().table_service.delete_by_project(self._project_id)
+            show_toast(tr("tables_tab.delete_all.done").format(n=n), "success")
+            self._current_table = None
+            self.refresh()
+        except Exception as e:
+            QMessageBox.warning(self, tr("common.error"), str(e))
 
     def _on_import_sql(self) -> None:
         """从 SQL 文件批量导入表结构。"""

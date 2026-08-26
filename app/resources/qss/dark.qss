@@ -221,6 +221,18 @@ QTableWidget::item, QTableView::item, QTreeView::item, QListView::item {
     padding: 6px 10px;
     border-bottom: 1px solid #334155;
 }
+/* QListWidget 选中行 — 整行染色,不止是边框 */
+QListWidget::item:selected,
+QListView::item:selected {
+    background-color: #1d4ed8;  /* 深蓝,跟主色一致 */
+    color: #ffffff;
+    border: none;
+    border-left: 3px solid #60a5fa;  /* 左侧一道亮蓝,选中感更强 */
+}
+QListWidget::item:hover:!selected,
+QListView::item:hover:!selected {
+    background-color: #1e293b;
+}
 
 /* Scrollbar */
 QScrollBar:vertical {

@@ -2,11 +2,12 @@
 from __future__ import annotations
 import os
 from typing import Optional
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QSize
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QTextEdit,
     QPushButton, QListWidget, QListWidgetItem, QFileDialog, QHBoxLayout,
-    QMessageBox, QSizePolicy, QFrame,
+    QMessageBox, QSizePolicy, QFrame, QGridLayout,
 )
 import qtawesome as qta
 
@@ -16,38 +17,62 @@ from app.core.file_reader import detect_format
 
 
 class FileRow(QFrame):
-    """单张表 + 一个文件路径"""
+    """单张表 + 一个文件路径 — 表格网格布局,列名不会被截断。"""
     path_changed = Signal()
 
     def __init__(self, table: Table, parent=None):
         super().__init__(parent)
         self._table = table
         self.setFrameShape(QFrame.Shape.StyledPanel)
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 6, 8, 6)
-        layout.setSpacing(8)
+        # 用 QGridLayout — 表名列固定宽度,路径列弹性伸缩,操作列固定
+        layout = QGridLayout(self)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setHorizontalSpacing(8)
+        layout.setVerticalSpacing(4)
 
+        # 第 0 列(表名) — 加表格 emoji 让"表 vs 文件路径"区分开
         lbl = QLabel(f"📄 {table.name}")
-        lbl.setMinimumWidth(140)
-        lbl.setStyleSheet("font-weight: 500;")
-        layout.addWidget(lbl)
+        lbl.setMinimumWidth(180)
+        lbl.setMaximumWidth(200)
+        lbl.setStyleSheet("font-weight: 600; font-size: 13px;")
+        lbl.setToolTip(table.name)
+        layout.addWidget(lbl, 0, 0, Qt.AlignmentFlag.AlignVCenter)
 
+        # 第 1 列(路径)— 显眼的输入框,等宽字体,稍高
         self.path_edit = QLineEdit()
         self.path_edit.setPlaceholderText(tr("dlg.version.file.placeholder"))
         self.path_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        layout.addWidget(self.path_edit, 1)
+        self.path_edit.setMinimumHeight(34)
+        # 等宽字体让文件路径更可读
+        mono = QFont("Consolas")
+        mono.setStyleHint(QFont.StyleHint.Monospace)
+        self.path_edit.setFont(mono)
+        self.path_edit.setStyleSheet(
+            "QLineEdit { padding: 6px 10px; border-radius: 4px; }"
+        )
+        layout.addWidget(self.path_edit, 0, 1)
 
+        # 第 2 列(浏览)
         browse_btn = QPushButton(tr("action.browse"))
         browse_btn.setObjectName("Ghost")
         browse_btn.setIcon(qta.icon("mdi6.folder-open-outline", color="#94a3b8"))
         browse_btn.clicked.connect(self._browse)
-        layout.addWidget(browse_btn)
+        layout.addWidget(browse_btn, 0, 2)
 
+        # 第 3 列(清除)
         clear_btn = QPushButton()
         clear_btn.setIcon(qta.icon("mdi6.close", color="#94a3b8"))
-        clear_btn.setFixedSize(32, 32)
+        clear_btn.setFixedSize(34, 34)
+        clear_btn.setToolTip("清除")
         clear_btn.clicked.connect(lambda: self.path_edit.clear())
-        layout.addWidget(clear_btn)
+        layout.addWidget(clear_btn, 0, 3)
+
+        # 副标题行:列数 + 格式提示
+        info_lbl = QLabel(f"({len(table.columns)} cols · {tr('dlg.version.file.format_hint')})")
+        info_lbl.setObjectName("Muted")
+        info_lbl.setStyleSheet("font-size: 11px; color: #64748b;")
+        layout.addWidget(info_lbl, 1, 0, 1, 4)
+        layout.setRowStretch(0, 1)
 
     def _browse(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -70,7 +95,9 @@ class NewVersionDialog(QDialog):
         super().__init__(parent)
         self._tables = tables
         self.setWindowTitle(tr("dlg.version.title"))
-        self.setMinimumSize(720, 520)
+        # 表多时也要好用 — 初始 960x720,允许更大
+        self.resize(960, 720)
+        self.setMinimumSize(800, 560)
         self._build(default_version_name)
 
     def _build(self, default_name):
@@ -92,12 +119,19 @@ class NewVersionDialog(QDialog):
         layout.addWidget(QLabel(tr("dlg.version.files")))
         self.file_list = QListWidget()
         self.file_list.setSelectionMode(QListWidget.SelectionMode.NoSelection)
+        # 关键:让 list 内部每一项都展开 — 不然 FileRow 会被裁切
+        self.file_list.setUniformItemSizes(False)
+        # 让 list 内部上下没空白,行与行紧贴
+        self.file_list.setSpacing(0)
+        # 去掉 list 自己的边框(每行 QFrame 已经有 StyledPanel)
+        self.file_list.setFrameShape(QListWidget.Shape.NoFrame)
         self._row_widgets: list[FileRow] = []
         for t in self._tables:
             item = QListWidgetItem(self.file_list)
             row = FileRow(t)
             self._row_widgets.append(row)
-            item.setSizeHint(row.sizeHint())
+            # 强制行高 76,适配新增的副标题行
+            item.setSizeHint(QSize(0, 76))
             self.file_list.addItem(item)
             self.file_list.setItemWidget(item, row)
         layout.addWidget(self.file_list, 1)

@@ -76,5 +76,9 @@ class TableService:
     def delete(self, table_id: int) -> None:
         self.repo.delete(table_id)
 
+    def delete_by_project(self, project_id: int) -> int:
+        """删除项目下所有表,返回删除数量。"""
+        return self.repo.delete_by_project(project_id)
+
     def generate_ddl(self, name: str, columns: list[Column]) -> str:
         return _build_ddl(name, columns)
