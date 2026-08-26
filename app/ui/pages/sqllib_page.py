@@ -14,7 +14,7 @@ from app.ui.widgets import EmptyState, show_toast
 from app.ui.widgets.syntax_highlight import SqlHighlighter
 from app.ui.dialogs import SqlSnippetDialog
 from app.services.registry import reg
-from app.repos.sql_snippet_repo import SqlSnippet
+from app.repos.sql_snippet_repo import SqlSnippet, DIALECTS
 
 
 def _split_tags(tags: str) -> list[str]:
@@ -67,6 +67,12 @@ class SqlLibPage(QWidget):
         self.tag_filter.setMinimumWidth(130)
         self.tag_filter.currentIndexChanged.connect(self._on_filter_change)
         tb.addWidget(self.tag_filter)
+
+        # 方言过滤
+        self.dialect_filter = QComboBox()
+        self.dialect_filter.setMinimumWidth(110)
+        self.dialect_filter.currentIndexChanged.connect(self._on_filter_change)
+        tb.addWidget(self.dialect_filter)
 
         tb.addStretch()
 
@@ -172,6 +178,7 @@ class SqlLibPage(QWidget):
         # 保留当前选中的项目/标签,只刷新显示文字
         self._refresh_project_filter()
         self._refresh_tag_filter()
+        self._refresh_dialect_filter()
 
     def _init_state(self) -> None:
         for w in self._detail_widgets:
@@ -215,17 +222,33 @@ class SqlLibPage(QWidget):
                 self.tag_filter.setCurrentIndex(idx)
         self.tag_filter.blockSignals(False)
 
+    def _refresh_dialect_filter(self) -> None:
+        """方言过滤下拉:全部 + 3 个方言。"""
+        cur = self.dialect_filter.currentData()
+        self.dialect_filter.blockSignals(True)
+        self.dialect_filter.clear()
+        self.dialect_filter.addItem(tr("sqllib.dialect.all"), "")
+        for d in DIALECTS:
+            self.dialect_filter.addItem(d.upper(), d)
+        if cur is not None:
+            idx = self.dialect_filter.findData(cur)
+            if idx >= 0:
+                self.dialect_filter.setCurrentIndex(idx)
+        self.dialect_filter.blockSignals(False)
+
     def refresh(self) -> None:
         """从 DB 重读过滤条件 + 重新计算可用 tag 列表。"""
         self._refresh_project_filter()
         self._refresh_tag_filter()
+        self._refresh_dialect_filter()
         self._on_filter_change()
 
     def _on_filter_change(self) -> None:
-        """search + project + tag 三合一过滤。无结果时 inline EmptyState,不弹窗。"""
+        """search + project + tag + dialect 四合一过滤。"""
         q = self.search.text().strip()
         cur_project = self.project_filter.currentData()
         cur_tag = self.tag_filter.currentData() or ""
+        cur_dialect = self.dialect_filter.currentData() or ""
 
         # 1) 项目范围
         if cur_project is None:
@@ -239,7 +262,11 @@ class SqlLibPage(QWidget):
         if cur_tag:
             base = [s for s in base if cur_tag in _split_tags(s.tags)]
 
-        # 3) 搜索关键词
+        # 3) dialect 过滤
+        if cur_dialect:
+            base = [s for s in base if s.dialect == cur_dialect]
+
+        # 4) 搜索关键词
         if q:
             ql = q.lower()
             base = [s for s in base
@@ -296,6 +323,7 @@ class SqlLibPage(QWidget):
         else:
             meta.append("🌐 全局")
         meta.append(f"使用 {s.use_count} 次")
+        meta.append(f"🛢  {s.dialect.upper()}")
         if s.tags:
             meta.append(f"🏷  {s.tags}")
         if s.description:
@@ -304,8 +332,11 @@ class SqlLibPage(QWidget):
         self.sql_view.setPlainText(s.sql_text)
 
     def _on_new(self) -> None:
+        # 预填方言:沿用当前过滤项
+        cur_dialect = self.dialect_filter.currentData() or "postgres"
         dlg = SqlSnippetDialog(
             projects=reg().project_service.list_all(),
+            default_dialect=cur_dialect if cur_dialect else "postgres",
             parent=self,
         )
         if dlg.exec() == dlg.DialogCode.Accepted:
@@ -315,6 +346,7 @@ class SqlLibPage(QWidget):
                     title=v["title"], sql_text=v["sql_text"],
                     description=v["description"], tags=v["tags"],
                     project_id=v["project_id"],
+                    dialect=v["dialect"],
                 )
                 show_toast(tr("toast.saved"), "success")
                 self.refresh()
@@ -324,9 +356,11 @@ class SqlLibPage(QWidget):
     def _on_edit_current(self) -> None:
         if not self._current:
             return
+        cur_dialect = self.dialect_filter.currentData() or "postgres"
         dlg = SqlSnippetDialog(
             snippet=self._current,
             projects=reg().project_service.list_all(),
+            default_dialect=cur_dialect if cur_dialect else "postgres",
             parent=self,
         )
         if dlg.exec() == dlg.DialogCode.Accepted:
@@ -337,6 +371,7 @@ class SqlLibPage(QWidget):
                     title=v["title"], description=v["description"],
                     sql_text=v["sql_text"], tags=v["tags"],
                     project_id=v["project_id"],
+                    dialect=v["dialect"],
                 )
                 show_toast(tr("toast.saved"), "success")
                 self.refresh()

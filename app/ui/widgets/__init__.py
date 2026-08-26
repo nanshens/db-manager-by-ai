@@ -2,3 +2,4 @@
 from .toast import ToastManager, show_toast
 from .empty_state import EmptyState
 from .syntax_highlight import SqlHighlighter
+from .sql_autocomplete import SqlAutocomplete

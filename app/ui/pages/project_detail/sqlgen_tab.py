@@ -1,21 +1,20 @@
 """SQL Generator Tab — 批量为多张表生成 INSERT/DELETE/Import-CSV/Export-CSV
 
 特性:
-- 整行可点击切换勾选
-- 选中行(checked)整行染色,不是 :selected(用自定义 QStyledItemDelegate 实现)
+- 整行点击 = 切换选中(无 checkbox,MultiSelection 模式)
+- 选中行整行深蓝(走 QSS :selected)
 - 顶部显示 已选 N / 总 M
-- Import/Export 带配置面板(列名/格式/header)
-- 输出无注释无空行,方便复制后多行替换
+- Import/Export 选项固定一行显示(不弹不收)
+- 输出无注释、无空行,直接多行替换
 """
 from __future__ import annotations
 from typing import Optional
-from PySide6.QtCore import Qt, QRect, QSize
-from PySide6.QtGui import QBrush, QColor, QFont, QPalette
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QHBoxLayout, QVBoxLayout, QPushButton, QLabel, QFrame, QCheckBox,
     QRadioButton, QButtonGroup, QPlainTextEdit, QListWidget,
     QListWidgetItem, QMessageBox, QWidget, QSplitter,
-    QStyledItemDelegate, QStyle, QApplication,
+    QAbstractItemView, QLineEdit,
 )
 import qtawesome as qta
 
@@ -28,51 +27,15 @@ from app.core.sqlgen import (
 )
 
 
-# 选中行(checked)配色
-_COLOR_CHECKED_DARK = QColor("#1e3a8a")
-_COLOR_CHECKED_LIGHT = QColor("#dbeafe")
-_COLOR_CHECKED_FG_DARK = QColor("#ffffff")
-_COLOR_CHECKED_FG_LIGHT = QColor("#1e3a8a")
-
-
-def _is_dark_theme() -> bool:
-    return True
-
-
-class _CheckedRowDelegate(QStyledItemDelegate):
-    """自定义 delegate: 根据 checkState 整行染色,覆盖 QSS 的默认 :selected。"""
-
-    def paint(self, painter, option, index):
-        # 拿 item 的 check state
-        is_checked = (index.data(Qt.ItemDataRole.CheckStateRole) == Qt.CheckState.Checked.value)
-        # 只在 checked 时画背景;否则让 QSS 默认样式生效
-        if is_checked:
-            dark = _is_dark_theme()
-            bg = _COLOR_CHECKED_DARK if dark else _COLOR_CHECKED_LIGHT
-            fg = _COLOR_CHECKED_FG_DARK if dark else _COLOR_CHECKED_FG_LIGHT
-            painter.save()
-            painter.fillRect(option.rect, bg)
-            painter.setPen(fg)
-        # 让默认 delegate 画文字 + checkbox
-        super().paint(painter, option, index)
-        if is_checked:
-            painter.restore()
-
-    def sizeHint(self, option, index) -> QSize:
-        s = super().sizeHint(option, index)
-        s.setHeight(max(s.height(), 28))
-        return s
-
-
 class _TableListItem(QListWidgetItem):
-    """可勾选的表项 — 颜色由 _CheckedRowDelegate 渲染。"""
+    """纯点击切换选中的表项 — 不要 checkbox。"""
     def __init__(self, table, parent=None):
         super().__init__(parent)
         self.table = table
-        self.setFlags(self.flags() | Qt.ItemFlag.ItemIsUserCheckable)
         self.setText(f"📄 {table.name}    ({len(table.columns)} cols)")
-        self.setCheckState(Qt.CheckState.Unchecked)
         self.setData(Qt.ItemDataRole.UserRole, table.id)
+        # 默认不选中
+        self.setSelected(False)
 
 
 class SqlGenTab(QWidget):
@@ -97,30 +60,28 @@ class SqlGenTab(QWidget):
         ll.setContentsMargins(12, 12, 12, 12)
         ll.setSpacing(8)
 
-        # 表列表头(带"已选 N / 总 M" + 全选/反选)
+        # 表列表头(已选 N / 总 M + 全选/反选)
         tbl_hdr = QHBoxLayout()
         tbl_hdr.addWidget(QLabel(tr("sqlgen_tab.tables")))
-        self.count_label = QLabel("")  # "已选 0 / 总 0"
+        self.count_label = QLabel("")
         self.count_label.setObjectName("Muted")
         self.count_label.setStyleSheet("font-size: 11px; margin-left: 8px;")
         tbl_hdr.addWidget(self.count_label)
         tbl_hdr.addStretch()
         self.sel_all_btn = QPushButton(tr("action.select_all"))
         self.sel_all_btn.setObjectName("Ghost")
-        self.sel_all_btn.clicked.connect(self._on_select_all_tables)
+        self.sel_all_btn.clicked.connect(self._on_select_all)
         tbl_hdr.addWidget(self.sel_all_btn)
         self.desel_all_btn = QPushButton(tr("action.deselect_all"))
         self.desel_all_btn.setObjectName("Ghost")
-        self.desel_all_btn.clicked.connect(self._on_deselect_all_tables)
+        self.desel_all_btn.clicked.connect(self._on_deselect_all)
         tbl_hdr.addWidget(self.desel_all_btn)
         ll.addLayout(tbl_hdr)
 
+        # 表列表:MultiSelection 模式 → 点击切换(无 checkbox)
         self.table_list = QListWidget()
-        # 自定义 delegate: 勾选 = 整行深蓝
-        self.table_list.setItemDelegate(_CheckedRowDelegate(self.table_list))
-        self.table_list.itemClicked.connect(self._on_item_clicked)
-        # itemChanged 在 check state 变化时触发(程序和点击都走)— 强制重绘
-        self.table_list.itemChanged.connect(self._on_item_changed)
+        self.table_list.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
+        self.table_list.itemSelectionChanged.connect(self._update_count)
         ll.addWidget(self.table_list, 1)
 
         # 操作复选框
@@ -130,44 +91,42 @@ class SqlGenTab(QWidget):
         self.op_insert = QCheckBox("INSERT")
         self.op_insert.setChecked(True)
         self.op_delete = QCheckBox("DELETE")
-        self.op_copy = QCheckBox("Import CSV/TSV")
+        self.op_import = QCheckBox("Import CSV/TSV")
         self.op_export = QCheckBox("Export CSV/TSV")
-        # IMPORT/EXPORT 任一勾选时,显示配置面板
-        self.op_copy.toggled.connect(self._on_op_toggled)
-        self.op_export.toggled.connect(self._on_op_toggled)
         ll.addWidget(self.op_insert)
         ll.addWidget(self.op_delete)
-        ll.addWidget(self.op_copy)
+        ll.addWidget(self.op_import)
         ll.addWidget(self.op_export)
 
-        # === Import/Export 配置面板(默认隐藏) ===
-        self.io_config = QFrame()
-        self.io_config.setFrameShape(QFrame.Shape.StyledPanel)
-        self.io_config.setStyleSheet("background-color: rgba(59, 130, 246, 0.05); border-radius: 4px;")
-        iol = QVBoxLayout(self.io_config)
-        iol.setContentsMargins(8, 6, 8, 6)
-        iol.setSpacing(4)
-        iol.addWidget(self._kv_label(tr("sqlgen_tab.io.format")))
-        fmt_row = QHBoxLayout()
+        # === Import/Export 配置:固定一行(始终可见,不弹不收) ===
+        io_row = QHBoxLayout()
+        io_row.setSpacing(12)
+        # 格式
+        io_row.addWidget(QLabel(tr("sqlgen_tab.io.format")))
         self.fmt_csv = QRadioButton("CSV")
         self.fmt_tsv = QRadioButton("TSV")
         self.fmt_csv.setChecked(True)
         self.fmt_group = QButtonGroup(self)
         self.fmt_group.addButton(self.fmt_csv, 0)
         self.fmt_group.addButton(self.fmt_tsv, 1)
-        fmt_row.addWidget(self.fmt_csv)
-        fmt_row.addWidget(self.fmt_tsv)
-        fmt_row.addStretch()
-        iol.addLayout(fmt_row)
+        io_row.addWidget(self.fmt_csv)
+        io_row.addWidget(self.fmt_tsv)
+        # 目录(默认空,生成 SQL 时只拼文件名;填了就用这个目录)
+        io_row.addWidget(QLabel(tr("sqlgen_tab.io.dir")))
+        self.io_dir = QLineEdit()
+        self.io_dir.setPlaceholderText(tr("sqlgen_tab.io.dir.placeholder"))
+        self.io_dir.setMaximumWidth(180)
+        self.io_dir.setToolTip(tr("sqlgen_tab.io.dir.tip"))
+        io_row.addWidget(self.io_dir)
+        # 列名 / 表头 复选
         self.with_columns = QCheckBox(tr("sqlgen_tab.io.with_columns"))
         self.with_columns.setChecked(True)
         self.with_columns.setToolTip(tr("sqlgen_tab.io.with_columns.tip"))
-        iol.addWidget(self.with_columns)
+        io_row.addWidget(self.with_columns)
         self.with_header = QCheckBox(tr("sqlgen_tab.io.with_header"))
         self.with_header.setChecked(True)
-        iol.addWidget(self.with_header)
-        self.io_config.setVisible(False)
-        ll.addWidget(self.io_config)
+        io_row.addWidget(self.with_header)
+        ll.addLayout(io_row)
 
         # 生成按钮
         gen_btn = QPushButton(tr("sqlgen_tab.generate"))
@@ -211,14 +170,6 @@ class SqlGenTab(QWidget):
         self.splitter.addWidget(right)
         self.splitter.setSizes([360, 800])
 
-    # ----- 工具 -----
-    @staticmethod
-    def _kv_label(text: str) -> QLabel:
-        lbl = QLabel(text)
-        lbl.setObjectName("Muted")
-        lbl.setStyleSheet("font-size: 11px; font-weight: 600;")
-        return lbl
-
     # ============== 数据装载 ==============
     def set_project(self, project_id: int) -> None:
         self._project_id = project_id
@@ -244,64 +195,39 @@ class SqlGenTab(QWidget):
         self._refresh_tables()
 
     # ============== 槽 ==============
-    def _on_item_clicked(self, item: QListWidgetItem) -> None:
-        """整行点击 → 切换勾选(色块由 _CheckedRowDelegate 渲染)。"""
-        new_state = (
-            Qt.CheckState.Unchecked if item.checkState() == Qt.CheckState.Checked
-            else Qt.CheckState.Checked
-        )
-        item.setCheckState(new_state)
-        self._update_count()
+    def _on_select_all(self) -> None:
+        self.table_list.selectAll()
 
-    def _on_item_changed(self, _item: QListWidgetItem) -> None:
-        """check state 变了 → 强制刷新 list(让 delegate 重新画) + 同步计数。"""
-        self.table_list.viewport().update()
-        self._update_count()
-
-    def _on_select_all_tables(self) -> None:
-        self.table_list.blockSignals(True)
-        for i in range(self.table_list.count()):
-            self.table_list.item(i).setCheckState(Qt.CheckState.Checked)
-        self.table_list.blockSignals(False)
-        self.table_list.viewport().update()
-        self._update_count()
-
-    def _on_deselect_all_tables(self) -> None:
-        self.table_list.blockSignals(True)
-        for i in range(self.table_list.count()):
-            self.table_list.item(i).setCheckState(Qt.CheckState.Unchecked)
-        self.table_list.blockSignals(False)
-        self.table_list.viewport().update()
-        self._update_count()
+    def _on_deselect_all(self) -> None:
+        self.table_list.clearSelection()
 
     def _update_count(self) -> None:
         total = self.table_list.count()
-        sel = sum(
-            1 for i in range(total)
-            if self.table_list.item(i).checkState() == Qt.CheckState.Checked
-        )
+        sel = len(self.table_list.selectedItems())
         self.count_label.setText(f"({sel} / {total})")
 
-    def _on_op_toggled(self) -> None:
-        """Import/Export 任一勾选 → 显示配置面板。"""
-        self.io_config.setVisible(
-            self.op_copy.isChecked() or self.op_export.isChecked()
-        )
-
     def _selected_tables(self) -> list:
-        return [
-            it.table for i in range(self.table_list.count())
-            for it in [self.table_list.item(i)]
-            if it.checkState() == Qt.CheckState.Checked
-        ]
+        return [it.table for it in self.table_list.selectedItems()]
 
     def _io_config_kwargs(self) -> dict:
-        """Import/Export 共享的格式化参数。"""
         return dict(
             fmt="tsv" if self.fmt_tsv.isChecked() else "csv",
             with_columns=self.with_columns.isChecked(),
             with_header=self.with_header.isChecked(),
+            directory=self.io_dir.text().strip().rstrip("\\/"),  # 去掉末尾分隔符
         )
+
+    def _resolve_io_path(self, t_name: str, direction: str) -> str:
+        """根据配置的目录 + 表名 + 格式,生成完整路径。
+
+        - 目录空:只返回 "{t_name}.{fmt}"
+        - 目录非空:返回 "{directory}/{t_name}.{fmt}"(用 / 通用,PG 也吃)
+        """
+        cfg = self._io_config_kwargs()
+        base = cfg["directory"]
+        if base:
+            return f"{base}/{t_name}.{cfg['fmt']}"
+        return f"{t_name}.{cfg['fmt']}"
 
     def _on_generate(self) -> None:
         tables = self._selected_tables()
@@ -314,7 +240,7 @@ class SqlGenTab(QWidget):
         if not any([
             self.op_insert.isChecked(),
             self.op_delete.isChecked(),
-            self.op_copy.isChecked(),
+            self.op_import.isChecked(),
             self.op_export.isChecked(),
         ]):
             QMessageBox.information(
@@ -324,6 +250,8 @@ class SqlGenTab(QWidget):
             return
 
         cfg = self._io_config_kwargs()
+        # 每张表 × 每种操作 = 1 行,行内不含换行;块间用单个 \n 分隔 → 无空行
+        # 完全去掉任何注释/标题行,只保留可执行 SQL
         lines: list[str] = []
         for t in tables:
             cols = [c.name for c in t.columns]
@@ -332,35 +260,24 @@ class SqlGenTab(QWidget):
                 lines.append(generate_insert(t.name, cols))
             if self.op_delete.isChecked():
                 lines.append(generate_delete(t.name, pk_col))
-            if self.op_copy.isChecked():
-                # Import: COPY ... FROM (列名可选/格式/header 可选)
-                lines.append(
-                    f"-- IMPORT {t.name}\n"
-                    + generate_copy(
-                        t.name, cols if cfg["with_columns"] else [],
-                        f"D:\\import\\{t.name}.{cfg['fmt']}",
-                        fmt=cfg["fmt"],
-                        with_columns=cfg["with_columns"],
-                        with_header=cfg["with_header"],
-                    )
-                )
+            if self.op_import.isChecked():
+                lines.append(generate_copy(
+                    t.name, cols if cfg["with_columns"] else [],
+                    self._resolve_io_path(t.name, "import"),
+                    fmt=cfg["fmt"],
+                    with_columns=cfg["with_columns"],
+                    with_header=cfg["with_header"],
+                ))
             if self.op_export.isChecked():
-                lines.append(
-                    f"-- EXPORT {t.name}\n"
-                    + generate_csv_export(
-                        t.name, cols if cfg["with_columns"] else [],
-                        f"D:\\export\\{t.name}.{cfg['fmt']}",
-                        fmt=cfg["fmt"],
-                        with_columns=cfg["with_columns"],
-                        with_header=cfg["with_header"],
-                    )
-                )
-        # 紧凑:去掉空行 + 合并连续多行
-        compact = "\n".join(
-            "\n".join(line for line in block.splitlines() if line.strip())
-            for block in lines
-        )
-        self.sql_view.setPlainText(compact)
+                lines.append(generate_csv_export(
+                    t.name, cols if cfg["with_columns"] else [],
+                    self._resolve_io_path(t.name, "export"),
+                    fmt=cfg["fmt"],
+                    with_columns=cfg["with_columns"],
+                    with_header=cfg["with_header"],
+                ))
+        # 直接 join,无任何注释、无空行
+        self.sql_view.setPlainText("\n".join(lines))
         show_toast(
             tr("sqlgen_tab.generated").format(n=len(tables)),
             "success", 1500,
@@ -376,6 +293,7 @@ class SqlGenTab(QWidget):
         dlg = SqlSnippetDialog(
             projects=reg().project_service.list_all(),
             default_project_id=self._project_id,
+            default_dialect="postgres",
             parent=self,
         )
         if tables:

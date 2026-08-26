@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS sql_snippet (
   sql_text     TEXT NOT NULL,
   tags         TEXT,
   project_id   INTEGER REFERENCES project(id) ON DELETE SET NULL,
+  dialect      TEXT NOT NULL DEFAULT 'postgres',
   use_count    INTEGER DEFAULT 0,
   created_at   TEXT NOT NULL,
   updated_at   TEXT NOT NULL
@@ -177,4 +178,15 @@ def init_db(db_path: Path) -> None:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = get_connection(db_path)
     conn.executescript(SCHEMA_SQL)
+    # 迁移:给老库加 dialect 列(SQLite ALTER 不支持 IF NOT EXISTS,要先查)
+    _migrate_add_dialect(conn)
     conn.commit()
+
+
+def _migrate_add_dialect(conn: sqlite3.Connection) -> None:
+    """如果 sql_snippet 表没有 dialect 列,加上(默认 'postgres')。"""
+    cols = [r["name"] for r in conn.execute("PRAGMA table_info(sql_snippet)").fetchall()]
+    if "dialect" not in cols:
+        conn.execute(
+            "ALTER TABLE sql_snippet ADD COLUMN dialect TEXT NOT NULL DEFAULT 'postgres'"
+        )

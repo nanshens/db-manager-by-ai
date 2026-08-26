@@ -118,6 +118,14 @@ def main():
     win._switch_page(PageId.SQLLIB)
     QApplication.processEvents()
     grab(win, "04_sqllib_dark")
+    # 切到 PostgreSQL 方言过滤演示
+    from app.repos.sql_snippet_repo import DIALECTS
+    for i in range(win.sqllib_page.dialect_filter.count()):
+        if win.sqllib_page.dialect_filter.itemData(i) == "postgres":
+            win.sqllib_page.dialect_filter.setCurrentIndex(i)
+            break
+    QApplication.processEvents()
+    grab(win, "19_sqllib_dialect_filter")
 
     win._switch_page(PageId.EXCEL_TPL)
     QApplication.processEvents()
@@ -235,17 +243,55 @@ def main():
     # Detail page - sqlgen tab — 必须重新 _open_project 才会显示详情页
     win._open_project(p1.id)
     win.project_detail_page.tabs.setCurrentIndex(2)
-    # 勾两张表演示选中态
+    # 选两张表演示选中态(纯点击,不靠 checkbox)
     sqlgen = win.project_detail_page.sqlgen_tab
     for i in range(sqlgen.table_list.count()):
-        sqlgen.table_list.item(i).setCheckState(Qt.CheckState.Checked)
+        sqlgen.table_list.item(i).setSelected(True)
     QApplication.processEvents()
     grab(win, "12_detail_sqlgen")
-    # 取消勾选,恢复默认
-    for i in range(sqlgen.table_list.count()):
-        sqlgen.table_list.item(i).setCheckState(Qt.CheckState.Unchecked)
+    # 取消选中,恢复默认
+    sqlgen.table_list.clearSelection()
+    QApplication.processEvents()
     # 关掉详情页回项目页
     win._switch_page(PageId.PROJECTS)
+
+    # SQL 片段新建弹窗 — 演示方言 + 自动联想 + 高亮
+    from app.ui.dialogs import SqlSnippetDialog
+    sdlg = SqlSnippetDialog(
+        projects=reg().project_service.list_all(),
+        default_project_id=p1.id,
+        default_dialect="postgres",
+    )
+    sdlg.title_edit.setText("用户列表")
+    sdlg.desc_edit.setText("查询所有活跃用户")
+    sdlg.tags_edit.setText("user, daily, select")
+    # 填一个完整的 SQL 用来演示高亮
+    sdlg.sql_edit.setPlainText(
+        "SELECT * FROM ORDERS\n"
+        "WHERE CREATED_AT >= CURRENT_DATE -- 今天的订单\n"
+        "  AND TOTAL > 100.50\n"
+        "ORDER BY ID DESC\n"
+        "LIMIT 10;"
+    )
+    QApplication.processEvents()
+    grab(sdlg, "18_sql_snippet_dialog")
+
+    # 自动联想触发 — 输入 'del' 后弹窗
+    sdlg2 = SqlSnippetDialog(
+        projects=reg().project_service.list_all(),
+        default_project_id=p1.id,
+        default_dialect="postgres",
+    )
+    sdlg2.sql_edit.setPlainText("DEL")
+    from PySide6.QtGui import QTextCursor
+    cursor = sdlg2.sql_edit.textCursor()
+    cursor.setPosition(3)
+    sdlg2.sql_edit.setTextCursor(cursor)
+    sdlg2._autocomplete._show_for_token(force=True)
+    QApplication.processEvents()
+    grab(sdlg2, "20_sql_autocomplete_popup")
+    sdlg.close()
+    sdlg2.close()
 
     # File Convert 页面
     win._switch_page(PageId.FILE_CONVERT)
