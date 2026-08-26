@@ -14,7 +14,7 @@ import qtawesome as qta
 from app import __app_name__, __version__
 from app.ui import i18n
 from app.ui.pages import (
-    HomePage, ProjectsPage, SqlLibPage, ExcelTemplatesPage, SettingsPage,
+    ProjectsPage, SqlLibPage, ExcelTemplatesPage, SettingsPage,
 )
 from app.ui.pages.project_detail_page import ProjectDetailPage
 from app.ui.widgets import show_toast
@@ -23,7 +23,6 @@ from app import config as app_config
 
 
 class PageId(str, Enum):
-    HOME = "home"
     PROJECTS = "projects"
     SQLLIB = "sqllib"
     EXCEL_TPL = "excel_tpl"
@@ -33,7 +32,6 @@ class PageId(str, Enum):
 
 # 侧边栏导航项配置
 NAV_ITEMS = [
-    (PageId.HOME, "mdi6.view-dashboard", "nav.dashboard"),
     (PageId.PROJECTS, "mdi6.folder-multiple", "nav.projects"),
     (PageId.SQLLIB, "mdi6.database", "nav.sqllib"),
     (PageId.EXCEL_TPL, "mdi6.microsoft-excel", "nav.excel_templates"),
@@ -98,7 +96,7 @@ class MainWindow(QMainWindow):
         self._build_content()
         self._build_shortcuts()
         self._apply_sidebar_state(animate=False)
-        self._switch_page(PageId.HOME)
+        self._switch_page(PageId.PROJECTS)
 
     # ============== 构建 ==============
     def _build_root(self) -> None:
@@ -197,7 +195,7 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
         self.stack.setObjectName("ContentStack")
 
-        self.home_page = HomePage()
+        self.home_page = None  # 仪表盘已移除
         self.projects_page = ProjectsPage()
         self.projects_page.open_project_clicked.connect(self._open_project)
         self.sqllib_page = SqlLibPage()
@@ -212,22 +210,20 @@ class MainWindow(QMainWindow):
         self.settings_page.theme_changed.connect(self._on_theme_change_requested)
         self.settings_page.language_changed.connect(self._on_language_change_requested)
 
-        # 顺序:home, projects, sqllib, excel_tpl, project_detail, settings
-        self.stack.addWidget(self.home_page)               # 0
-        self.stack.addWidget(self.projects_page)           # 1
-        self.stack.addWidget(self.sqllib_page)             # 2
-        self.stack.addWidget(self.excel_tpl_page)          # 3
-        self.stack.addWidget(self.project_detail_page)     # 4
-        self.stack.addWidget(self.settings_page)           # 5
+        # 顺序:projects, sqllib, excel_tpl, project_detail, settings
+        self.stack.addWidget(self.projects_page)           # 0
+        self.stack.addWidget(self.sqllib_page)             # 1
+        self.stack.addWidget(self.excel_tpl_page)          # 2
+        self.stack.addWidget(self.project_detail_page)     # 3
+        self.stack.addWidget(self.settings_page)           # 4
 
         # 保存 page_id → index 映射
         self._page_index = {
-            PageId.HOME: 0,
-            PageId.PROJECTS: 1,
-            PageId.SQLLIB: 2,
-            PageId.EXCEL_TPL: 3,
-            PageId.PROJECT_DETAIL: 4,
-            PageId.SETTINGS: 5,
+            PageId.PROJECTS: 0,
+            PageId.SQLLIB: 1,
+            PageId.EXCEL_TPL: 2,
+            PageId.PROJECT_DETAIL: 3,
+            PageId.SETTINGS: 4,
         }
 
         rl.addWidget(self.stack, 1)
@@ -239,11 +235,10 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+L"), self, activated=self._cycle_language)
         QShortcut(QKeySequence("Ctrl+K"), self, activated=lambda: self.search.setFocus())
         page_map = [
-            ("Ctrl+1", PageId.HOME),
-            ("Ctrl+2", PageId.PROJECTS),
-            ("Ctrl+3", PageId.SQLLIB),
-            ("Ctrl+4", PageId.EXCEL_TPL),
-            ("Ctrl+5", PageId.SETTINGS),
+            ("Ctrl+1", PageId.PROJECTS),
+            ("Ctrl+2", PageId.SQLLIB),
+            ("Ctrl+3", PageId.EXCEL_TPL),
+            ("Ctrl+4", PageId.SETTINGS),
         ]
         for seq, pid in page_map:
             QShortcut(QKeySequence(seq), self, activated=lambda p=pid: self._switch_page(p))
@@ -348,7 +343,7 @@ class MainWindow(QMainWindow):
         if self._is_collapsed:
             for btn in self.nav_buttons.values():
                 btn.set_collapsed(True)
-        for page in [self.home_page, self.projects_page, self.sqllib_page,
+        for page in [self.projects_page, self.sqllib_page,
                      self.excel_tpl_page, self.project_detail_page, self.settings_page]:
             if hasattr(page, "retranslate"):
                 page.retranslate()

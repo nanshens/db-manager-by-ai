@@ -80,3 +80,10 @@ class EmptyState(QFrame):
             )
         except Exception:
             self.icon_label.setText("📦")
+
+    def set_text(self, title: str = "", description: str = "") -> None:
+        """动态更新标题/描述(空字符串保留原值)"""
+        if title:
+            self.title_label.setText(title)
+        if description:
+            self.desc_label.setText(description)

@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.ui.i18n import tr
+from app.ui.widgets import SqlHighlighter
 from app.repos.sql_snippet_repo import SqlSnippet
 from app.repos.project_repo import Project
 
@@ -56,7 +57,7 @@ class SqlSnippetDialog(QDialog):
         # Project binding
         layout.addWidget(QLabel(tr("dlg.sql.project")))
         self.project_combo = QComboBox()
-        self.project_combo.addItem(tr("sqllib.project_filter_global"), None)  # 全局
+        self.project_combo.addItem(tr("sqllib.scope.unbound"), None)  # 全局共享(无项目绑定)
         if projects:
             for p in projects:
                 self.project_combo.addItem(p.name, p.id)
@@ -77,6 +78,7 @@ class SqlSnippetDialog(QDialog):
         mono.setStyleHint(QFont.StyleHint.Monospace)
         self.sql_edit.setFont(mono)
         self.sql_edit.setStyleSheet("font-family: Consolas, monospace; font-size: 12px;")
+        self._sql_highlighter = SqlHighlighter(self.sql_edit.document())
         if self._snippet:
             self.sql_edit.setPlainText(self._snippet.sql_text)
         layout.addWidget(self.sql_edit, 1)

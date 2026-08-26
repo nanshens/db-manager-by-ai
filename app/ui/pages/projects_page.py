@@ -159,12 +159,14 @@ class ProjectsPage(BasePage):
 
     def refresh(self) -> None:
         """从 DB 读项目并刷新网格"""
-        # 清空网格
+        # 清空网格:先取出 widget 引用,再 setParent + deleteLater
+        # (直接连续两次调 itemAt(i).widget() 会因为第一次 setParent 后 layout item 已无 widget)
         for i in reversed(range(self._grid_layout.count())):
             item = self._grid_layout.itemAt(i)
-            if item.widget():
-                item.widget().setParent(None)
-                item.widget().deleteLater()
+            widget = item.widget() if item else None
+            if widget:
+                widget.setParent(None)
+                widget.deleteLater()
 
         projects = reg().project_service.list_all()
         # 搜索过滤

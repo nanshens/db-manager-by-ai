@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
 import qtawesome as qta
 
 from app.ui.i18n import tr
-from app.ui.widgets import EmptyState, show_toast
+from app.ui.widgets import EmptyState, show_toast, SqlHighlighter
 from app.ui.dialogs import TableDialog
 from app.services.registry import reg
 from app.repos.table_repo import Table
@@ -108,6 +108,7 @@ class TablesTab(QWidget):
             "font-family: Consolas, monospace; font-size: 12px; "
             "background: #0b1220; color: #e2e8f0; border: 1px solid #334155; border-radius: 6px;"
         )
+        self._sql_highlighter = SqlHighlighter(self.ddl_view.document())
         self._right_layout.addWidget(self.ddl_view, 1)
 
         # Empty state for right

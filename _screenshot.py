@@ -1,6 +1,11 @@
 """生成多张 UI 截图"""
 import os
 os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+# 截图用唯一临时 DB
+os.environ['DBMANAGER_DATA_DIR'] = os.path.join(
+    os.environ.get('TEMP', '.'),
+    f'dbmanager_screenshot_{os.getpid()}'
+)
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path('.').resolve()))
@@ -90,18 +95,19 @@ def main():
         case_sensitive=False, trim_whitespace=True, is_default=True,
     )
 
-    win.home_page.refresh()
     win.projects_page.refresh()
     win.sqllib_page.refresh()
     win.excel_tpl_page.refresh()
     QApplication.processEvents()
 
-    # 截图
-    grab(win, "01_home_dark")
+    # 截图 — 默认就停在项目页
+    grab(win, "01_projects_dark")
 
-    win._switch_page(PageId.PROJECTS)
+    # 演示搜索行为(测试修复后的搜索)
+    win.projects_page.search.setText("CRM")
     QApplication.processEvents()
-    grab(win, "02_projects_dark")
+    grab(win, "02_projects_search")
+    win.projects_page.search.clear()
 
     win._open_project(p1.id)
     QApplication.processEvents()
@@ -119,9 +125,9 @@ def main():
 
     # Light
     win._on_theme_change_requested("light")
-    win._switch_page(PageId.HOME)
+    win._switch_page(PageId.PROJECTS)
     QApplication.processEvents()
-    grab(win, "06_home_light")
+    grab(win, "06_projects_light")
 
     # English
     win._on_theme_change_requested("dark")
@@ -142,7 +148,7 @@ def main():
 
     # Sidebar collapsed
     win._toggle_sidebar()
-    win._switch_page(PageId.HOME)
+    win._switch_page(PageId.PROJECTS)
     QApplication.processEvents()
     QTimer.singleShot(300, lambda: None)
     QApplication.processEvents()

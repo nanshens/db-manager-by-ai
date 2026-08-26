@@ -1,6 +1,11 @@
 """冒烟测试 — 启动后模拟一些操作,看是否崩溃"""
 import os
 os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+# 测试用唯一临时 DB,避免污染真实数据
+os.environ['DBMANAGER_DATA_DIR'] = os.path.join(
+    os.environ.get('TEMP', '.'),
+    f'dbmanager_test_{os.getpid()}'
+)
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path('.').resolve()))
@@ -118,7 +123,7 @@ def main():
 
     # 切换所有页
     from app.ui.main_window import PageId
-    for pid in [PageId.HOME, PageId.PROJECTS, PageId.SQLLIB, PageId.EXCEL_TPL, PageId.SETTINGS]:
+    for pid in [PageId.PROJECTS, PageId.SQLLIB, PageId.EXCEL_TPL, PageId.SETTINGS]:
         win._switch_page(pid)
         QApplication.processEvents()
         print(f"switched to {pid.value}")
@@ -126,7 +131,6 @@ def main():
     # 刷新所有页(模拟重新进入项目)
     print("\n=== 刷新所有页 ===")
     win.projects_page.refresh()
-    win.home_page.refresh()
     win.sqllib_page.refresh()
     win.excel_tpl_page.refresh()
     win._open_project(p.id)

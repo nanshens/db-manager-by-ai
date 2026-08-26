@@ -3,6 +3,10 @@
 不依赖 Qt GUI,直接通过 services 验证。
 """
 import os
+os.environ['DBMANAGER_DATA_DIR'] = os.path.join(
+    os.environ.get('TEMP', '.'),
+    f'dbmanager_selfcheck_{os.getpid()}'
+)
 import sys
 import shutil
 import tempfile

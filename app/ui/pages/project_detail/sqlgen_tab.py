@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
 import qtawesome as qta
 
 from app.ui.i18n import tr
-from app.ui.widgets import EmptyState, show_toast
+from app.ui.widgets import EmptyState, show_toast, SqlHighlighter
 from app.ui.dialogs import SqlSnippetDialog
 from app.services.registry import reg
 from app.core.sqlgen import (
@@ -100,6 +100,7 @@ class SqlGenTab(QWidget):
             "font-family: Consolas, monospace; font-size: 12px; "
             "background: #0b1220; color: #e2e8f0; border: 1px solid #334155; border-radius: 6px;"
         )
+        self._sql_highlighter = SqlHighlighter(self.sql_view.document())
         rl.addWidget(self.sql_view, 1)
 
         self.splitter.addWidget(left)
