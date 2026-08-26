@@ -11,9 +11,9 @@ import qtawesome as qta
 
 from app.ui.i18n import tr
 from app.ui.widgets import EmptyState, show_toast, SqlHighlighter
-from app.ui.dialogs import TableDialog
+from app.ui.dialogs import TableDialog, ImportSqlDialog
 from app.services.registry import reg
-from app.repos.table_repo import Table
+from app.repos.table_repo import Table, Column
 
 
 class TablesTab(QWidget):
@@ -42,6 +42,14 @@ class TablesTab(QWidget):
         self.add_btn.setIcon(qta.icon("mdi6.plus", color="white"))
         self.add_btn.clicked.connect(self._on_add)
         tb.addWidget(self.add_btn)
+
+        self.import_btn = QPushButton(tr("action.import"))
+        self.import_btn.setObjectName("Ghost")
+        self.import_btn.setIcon(qta.icon("mdi6.database-import-outline", color="#94a3b8"))
+        self.import_btn.setToolTip(tr("dlg.import_sql.title"))
+        self.import_btn.clicked.connect(self._on_import_sql)
+        tb.addWidget(self.import_btn)
+
         tb.addStretch()
         layout.addWidget(toolbar)
 
@@ -137,6 +145,8 @@ class TablesTab(QWidget):
 
     def retranslate(self) -> None:
         self.add_btn.setText(tr("tables_tab.add_table"))
+        self.import_btn.setText(tr("action.import"))
+        self.import_btn.setToolTip(tr("dlg.import_sql.title"))
         if self._current_table:
             self._show_detail(self._current_table)
         else:
@@ -239,3 +249,46 @@ class TablesTab(QWidget):
                 self.refresh()
             except Exception as e:
                 QMessageBox.warning(self, tr("common.error"), str(e))
+
+    def _on_import_sql(self) -> None:
+        """从 SQL 文件批量导入表结构。"""
+        if self._project_id is None:
+            return
+        dlg = ImportSqlDialog(parent=self, default_dialect="postgres")
+        if dlg.exec() != dlg.DialogCode.Accepted:
+            return
+        selected = dlg.get_selected_tables()
+        if not selected:
+            return
+
+        ok, fail, first_err = 0, 0, ""
+        for pt in selected:
+            try:
+                cols = [
+                    Column(
+                        name=c.name, type=c.type,
+                        nullable=c.nullable, default=c.default,
+                        pk=c.pk, comment=c.comment,
+                    )
+                    for c in pt.columns
+                ]
+                reg().table_service.create(
+                    self._project_id, pt.name, "", cols,
+                )
+                ok += 1
+            except Exception as e:
+                fail += 1
+                if not first_err:
+                    first_err = f"{pt.name}: {e}"
+        if fail == 0:
+            show_toast(tr("dlg.import_sql.done").format(n=ok), "success")
+        else:
+            show_toast(
+                tr("dlg.import_sql.partial").format(ok=ok, fail=fail),
+                "warning", 4000,
+            )
+            if first_err:
+                QMessageBox.warning(
+                    self, tr("dlg.import_sql.fail"), first_err
+                )
+        self.refresh()

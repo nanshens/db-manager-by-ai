@@ -141,22 +141,23 @@ class SqlLibPage(QWidget):
                                 self.copy_btn, self.edit_btn, self.del_btn]
         self._init_state()
 
-        # Empty state for right
+        # Empty state for right — 纯展示,无按钮(新建走工具栏)
         self.empty = EmptyState(
             icon_name="mdi6.database-outline",
             title=tr("sqllib.empty.title"),
             description=tr("sqllib.empty.desc"),
-            primary_text=tr("sqllib.new"),
+            primary_text="",  # 不显示按钮
+            parent=self,
         )
-        self._new_btn_empty = self.empty.primary_btn
+        # 留信号连接是为了兼容旧的"双击空态=新建"行为(虽然现在没按钮)
         self.empty.primary_clicked.connect(self._on_new)
+        self._new_btn_empty = None  # 不再需要
 
-        right_layout = QVBoxLayout()
+        right_layout = QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(0)
         right_layout.addWidget(self.empty)
         right_layout.addStretch()
-        right.setLayout(right_layout)
 
         self.splitter.addWidget(left)
         self.splitter.addWidget(right)

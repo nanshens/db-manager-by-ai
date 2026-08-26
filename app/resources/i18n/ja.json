@@ -114,6 +114,8 @@
 
   "action.create": "作成",
   "action.confirm_delete": "削除確認",
+  "action.select_all": "すべて選択",
+  "action.deselect_all": "選択解除",
 
   "dlg.new_project.title": "新規プロジェクト",
   "dlg.edit_project.title": "プロジェクト編集",
@@ -170,6 +172,23 @@
   "dlg.confirm.delete_project.msg": "プロジェクト「{name}」を削除しますか?\nすべてのテーブル / バージョン / SQL バインドも削除されます。元に戻せません。",
   "dlg.confirm.delete_table.title": "テーブル削除",
   "dlg.confirm.delete_table.msg": "テーブル「{name}」を削除しますか?",
+
+  "dlg.import_sql.title": "SQL からテーブルをインポート",
+  "dlg.import_sql.browse_title": "SQL ファイルを選択",
+  "dlg.import_sql.file": "SQL ファイル:",
+  "dlg.import_sql.file.placeholder": "CREATE TABLE を含む .sql ファイルを選択…",
+  "dlg.import_sql.tab.file": "ファイルから",
+  "dlg.import_sql.tab.paste": "SQL を貼り付け",
+  "dlg.import_sql.paste.placeholder": "CREATE TABLE スクリプトをここに貼り付け(複数文対応)…",
+  "dlg.import_sql.dialect": "SQL 方言:",
+  "dlg.import_sql.reparse": "再解析",
+  "dlg.import_sql.tables": "検出されたテーブル:",
+  "dlg.import_sql.import": "選択をインポート",
+  "dlg.import_sql.no_table_found": "CREATE TABLE 文が見つかりません",
+  "dlg.import_sql.empty_selection": "1 つ以上選択してください",
+  "dlg.import_sql.done": "{n} 件のテーブルをインポートしました",
+  "dlg.import_sql.partial": "完了: {ok} 件成功、{fail} 件失敗",
+  "dlg.import_sql.fail": "インポート失敗",
 
   "tables_tab.title": "テーブル",
   "tables_tab.add_table": "テーブル追加",

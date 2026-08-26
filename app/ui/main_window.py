@@ -6,7 +6,7 @@ from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, Signal, QSize
 from PySide6.QtGui import QAction, QKeySequence, QShortcut, QIcon
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget,
-    QPushButton, QFrame, QLabel, QLineEdit, QSizePolicy, QApplication,
+    QPushButton, QFrame, QLabel, QSizePolicy, QApplication,
     QButtonGroup, QToolButton,
 )
 import qtawesome as qta
@@ -155,41 +155,7 @@ class MainWindow(QMainWindow):
         rl.setContentsMargins(0, 0, 0, 0)
         rl.setSpacing(0)
 
-        # Top bar
-        self.topbar = QFrame()
-        self.topbar.setObjectName("TopBar")
-        self.topbar.setFixedHeight(52)
-        tb = QHBoxLayout(self.topbar)
-        tb.setContentsMargins(20, 0, 16, 0)
-        tb.setSpacing(8)
-
-        self.search = QLineEdit()
-        self.search.setPlaceholderText(f"🔍  {i18n.tr('action.search')}…  (Ctrl+K)")
-        self.search.setMaximumWidth(420)
-        self.search.setClearButtonEnabled(True)
-        tb.addWidget(self.search)
-
-        tb.addStretch()
-
-        self.theme_btn = QPushButton()
-        self.theme_btn.setObjectName("SidebarToggle")
-        self.theme_btn.setIcon(qta.icon("mdi6.weather-night", color="#94a3b8"))
-        self.theme_btn.setIconSize(QSize(18, 18))
-        self.theme_btn.setFixedSize(36, 36)
-        self.theme_btn.setToolTip("Toggle theme (Ctrl+/)")
-        self.theme_btn.clicked.connect(self._toggle_theme)
-        tb.addWidget(self.theme_btn)
-
-        self.lang_btn = QPushButton()
-        self.lang_btn.setObjectName("SidebarToggle")
-        self.lang_btn.setIcon(qta.icon("mdi6.translate", color="#94a3b8"))
-        self.lang_btn.setIconSize(QSize(18, 18))
-        self.lang_btn.setFixedSize(36, 36)
-        self.lang_btn.setToolTip("Switch language (Ctrl+L)")
-        self.lang_btn.clicked.connect(self._cycle_language)
-        tb.addWidget(self.lang_btn)
-
-        rl.addWidget(self.topbar)
+        # 顶部栏已删除 — 主题/语言走设置页(Ctrl+/ / Ctrl+L 快捷键仍可用)
 
         # Stacked pages
         self.stack = QStackedWidget()
@@ -233,7 +199,7 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+B"), self, activated=self._toggle_sidebar)
         QShortcut(QKeySequence("Ctrl+/"), self, activated=self._toggle_theme)
         QShortcut(QKeySequence("Ctrl+L"), self, activated=self._cycle_language)
-        QShortcut(QKeySequence("Ctrl+K"), self, activated=lambda: self.search.setFocus())
+        # Ctrl+K 已删除(顶部无搜索框)
         page_map = [
             ("Ctrl+1", PageId.PROJECTS),
             ("Ctrl+2", PageId.SQLLIB),
@@ -301,10 +267,6 @@ class MainWindow(QMainWindow):
         self._current_theme = theme
         app_config.set_theme(theme)
         self.theme_change_requested.emit(theme)
-        self.theme_btn.setIcon(qta.icon(
-            "mdi6.weather-sunny" if theme == "light" else "mdi6.weather-night",
-            color="#94a3b8"
-        ))
 
     # ============== 语言 ==============
     def _cycle_language(self) -> None:
@@ -331,10 +293,6 @@ class MainWindow(QMainWindow):
                     self.settings_page.theme_combo.setCurrentIndex(i)
                     self.settings_page.theme_combo.blockSignals(False)
                     break
-        self.theme_btn.setIcon(qta.icon(
-            "mdi6.weather-sunny" if theme == "light" else "mdi6.weather-night",
-            color="#94a3b8"
-        ))
 
     def set_lang_external(self, lang: str) -> None:
         self._current_lang = lang
@@ -347,7 +305,6 @@ class MainWindow(QMainWindow):
                      self.excel_tpl_page, self.project_detail_page, self.settings_page]:
             if hasattr(page, "retranslate"):
                 page.retranslate()
-        self.search.setPlaceholderText(f"🔍  {i18n.tr('action.search')}…  (Ctrl+K)")
 
     def current_theme(self) -> str:
         return self._current_theme

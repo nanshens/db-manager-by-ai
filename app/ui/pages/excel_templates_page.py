@@ -124,17 +124,17 @@ class ExcelTemplatesPage(QWidget):
             title=tr("excel_tpl.empty.title"),
             description=tr("excel_tpl.empty.desc"),
             primary_text=tr("excel_tpl.new"),
+            parent=self,  # 必须传 parent,避免成为独立顶层窗口
         )
         self._new_btn_empty = self.empty.primary_btn
         self.empty.primary_clicked.connect(self._on_new)
 
         # empty 直接放 right 容器,避免生命周期问题
-        right_layout = QVBoxLayout()
+        right_layout = QVBoxLayout(right)  # 构造时就指定 parent widget
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(0)
         right_layout.addWidget(self.empty)
         right_layout.addStretch()
-        right.setLayout(right_layout)
 
         self.splitter.addWidget(left)
         self.splitter.addWidget(right)

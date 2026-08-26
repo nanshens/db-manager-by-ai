@@ -114,6 +114,8 @@
 
   "action.create": "Create",
   "action.confirm_delete": "Confirm delete",
+  "action.select_all": "Select all",
+  "action.deselect_all": "Deselect all",
 
   "dlg.new_project.title": "New project",
   "dlg.edit_project.title": "Edit project",
@@ -170,6 +172,23 @@
   "dlg.confirm.delete_project.msg": "Delete project \"{name}\"?\nThis will also remove all its tables / versions / SQL bindings. Cannot be undone.",
   "dlg.confirm.delete_table.title": "Delete table",
   "dlg.confirm.delete_table.msg": "Delete table \"{name}\"?",
+
+  "dlg.import_sql.title": "Import tables from SQL",
+  "dlg.import_sql.browse_title": "Select SQL file",
+  "dlg.import_sql.file": "SQL file:",
+  "dlg.import_sql.file.placeholder": "Choose a .sql file with CREATE TABLE statements…",
+  "dlg.import_sql.tab.file": "From file",
+  "dlg.import_sql.tab.paste": "Paste SQL",
+  "dlg.import_sql.paste.placeholder": "Paste CREATE TABLE scripts here (multiple statements supported)…",
+  "dlg.import_sql.dialect": "SQL dialect:",
+  "dlg.import_sql.reparse": "Re-parse",
+  "dlg.import_sql.tables": "Detected tables:",
+  "dlg.import_sql.import": "Import selected",
+  "dlg.import_sql.no_table_found": "No CREATE TABLE statements found",
+  "dlg.import_sql.empty_selection": "Select at least 1 table",
+  "dlg.import_sql.done": "Imported {n} table(s)",
+  "dlg.import_sql.partial": "Imported {ok}, failed {fail}",
+  "dlg.import_sql.fail": "Import failed",
 
   "tables_tab.title": "Tables",
   "tables_tab.add_table": "Add table",

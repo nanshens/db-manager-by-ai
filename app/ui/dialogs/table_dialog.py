@@ -6,7 +6,7 @@ from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QTextEdit,
     QPushButton, QHeaderView, QTableWidget, QTableWidgetItem, QAbstractItemView,
-    QMessageBox,
+    QMessageBox, QWidget,
 )
 import qtawesome as qta
 

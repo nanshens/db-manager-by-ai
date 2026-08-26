@@ -50,7 +50,8 @@ class SqlSnippetRepo:
             clauses.append("project_id IS NULL")
         if clauses:
             sql += " WHERE " + " AND ".join(clauses)
-        sql += " ORDER BY updated_at DESC"
+        # 排序:用得多的在上面;同次数按最近更新
+        sql += " ORDER BY use_count DESC, updated_at DESC"
         rows = self._conn().execute(sql, params).fetchall()
         return [SqlSnippet(**dict(r)) for r in rows]
 
@@ -69,7 +70,8 @@ class SqlSnippetRepo:
         if project_id is not None:
             sql += " AND (project_id = ? OR project_id IS NULL)"
             params.append(project_id)
-        sql += " ORDER BY updated_at DESC"
+        # 排序:用得多的在上面;同次数按最近更新
+        sql += " ORDER BY use_count DESC, updated_at DESC"
         rows = self._conn().execute(sql, params).fetchall()
         return [SqlSnippet(**dict(r)) for r in rows]
 

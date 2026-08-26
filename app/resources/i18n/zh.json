@@ -114,6 +114,8 @@
 
   "action.create": "创建",
   "action.confirm_delete": "确认删除",
+  "action.select_all": "全选",
+  "action.deselect_all": "反选",
 
   "dlg.new_project.title": "新建项目",
   "dlg.edit_project.title": "编辑项目",
@@ -170,6 +172,23 @@
   "dlg.confirm.delete_project.msg": "确认删除项目「{name}」?\n将同时删除该项目的所有表 / 数据版本 / SQL 绑定,此操作不可恢复。",
   "dlg.confirm.delete_table.title": "删除表",
   "dlg.confirm.delete_table.msg": "确认删除表「{name}」?",
+
+  "dlg.import_sql.title": "从 SQL 导入表结构",
+  "dlg.import_sql.browse_title": "选择 SQL 文件",
+  "dlg.import_sql.file": "SQL 文件:",
+  "dlg.import_sql.file.placeholder": "选择包含 CREATE TABLE 的 .sql 文件…",
+  "dlg.import_sql.tab.file": "选择文件",
+  "dlg.import_sql.tab.paste": "粘贴 SQL",
+  "dlg.import_sql.paste.placeholder": "把 CREATE TABLE 脚本贴到这里,支持多条语句…",
+  "dlg.import_sql.dialect": "SQL 方言:",
+  "dlg.import_sql.reparse": "重新解析",
+  "dlg.import_sql.tables": "识别到的表:",
+  "dlg.import_sql.import": "导入所选",
+  "dlg.import_sql.no_table_found": "没有识别到 CREATE TABLE 语句",
+  "dlg.import_sql.empty_selection": "请至少勾选 1 张表",
+  "dlg.import_sql.done": "已导入 {n} 张表",
+  "dlg.import_sql.partial": "导入完成: {ok} 张成功,{fail} 张失败",
+  "dlg.import_sql.fail": "导入失败",
 
   "tables_tab.title": "表结构",
   "tables_tab.add_table": "添加表",

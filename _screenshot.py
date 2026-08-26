@@ -162,6 +162,53 @@ def main():
     QApplication.processEvents()
     grab(win, "11_detail_tables")
 
+    # Import SQL dialog preview — mock 几个表让它有内容显示
+    from app.core.ddl_parser import ParsedTable, ParsedColumn
+    from app.ui.dialogs.import_sql_dialog import ImportSqlDialog
+    sample_tables = [
+        ParsedTable(name="users", columns=[
+            ParsedColumn(name="id", type="BIGSERIAL", pk=True, nullable=False),
+            ParsedColumn(name="username", type="VARCHAR(50)", nullable=False),
+            ParsedColumn(name="email", type="VARCHAR(100)", nullable=False),
+            ParsedColumn(name="created_at", type="TIMESTAMP", default="CURRENT_TIMESTAMP"),
+        ], raw_ddl="CREATE TABLE users (...)"),
+        ParsedTable(name="orders", columns=[
+            ParsedColumn(name="id", type="SERIAL", pk=True, nullable=False),
+            ParsedColumn(name="user_id", type="INTEGER", nullable=False),
+            ParsedColumn(name="total", type="NUMERIC(10,2)", nullable=False),
+        ], raw_ddl="CREATE TABLE orders (...)"),
+        ParsedTable(name="order_items", parse_error="未识别到列", raw_ddl="..."),
+    ]
+    dlg = ImportSqlDialog(parent=win)
+    dlg.path_edit.setText("D:/sql/sample_schema.sql")
+    dlg._parsed_tables = sample_tables
+    dlg.table_list.clear()
+    from app.ui.dialogs.import_sql_dialog import _TableItem
+    for t in sample_tables:
+        dlg.table_list.addItem(_TableItem(t))
+    dlg._update_count()
+    QApplication.processEvents()
+    grab(dlg, "13_import_sql_dialog")
+
+    # Paste 模式截图
+    dlg.tabs.setCurrentIndex(1)
+    dlg.paste_edit.setPlainText(
+        "CREATE TABLE products (\n"
+        "    id INT PRIMARY KEY,\n"
+        "    name VARCHAR(200) NOT NULL,\n"
+        "    price DECIMAL(10,2) NOT NULL,\n"
+        "    stock INTEGER DEFAULT 0\n"
+        ");\n\n"
+        "CREATE TABLE categories (\n"
+        "    id SERIAL PRIMARY KEY,\n"
+        "    parent_id INTEGER,\n"
+        "    title VARCHAR(100) NOT NULL\n"
+        ");"
+    )
+    QApplication.processEvents()
+    grab(dlg, "14_import_sql_paste")
+    dlg.close()
+
     # Detail page - sqlgen tab
     win.project_detail_page.tabs.setCurrentIndex(2)
     QApplication.processEvents()
