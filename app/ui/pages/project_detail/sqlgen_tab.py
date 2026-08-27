@@ -89,7 +89,6 @@ class SqlGenTab(QWidget):
         op_label.setStyleSheet("font-weight: 600;")
         ll.addWidget(op_label)
         self.op_insert = QCheckBox("INSERT")
-        self.op_insert.setChecked(True)
         self.op_delete = QCheckBox("DELETE")
         self.op_import = QCheckBox("Import CSV/TSV")
         self.op_export = QCheckBox("Export CSV/TSV")

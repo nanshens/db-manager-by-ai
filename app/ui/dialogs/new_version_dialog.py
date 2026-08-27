@@ -437,6 +437,10 @@ class NewVersionDialog(QDialog):
         return files
 
     def _collect_batch(self) -> Optional[dict[str, str]]:
+        """收集已匹配的文件 {table_name: path}。
+        未匹配的文件不在这里返回 — 用 _collect_unmatched_files() 单独取。
+        校验: 路径存在 + 格式支持 + 不能两个文件同表。
+        """
         n = self.batch_table.rowCount()
         if n == 0:
             self._err(tr("dlg.version.error.no_files"))
@@ -445,13 +449,10 @@ class NewVersionDialog(QDialog):
         for r in range(n):
             combo = self.batch_table.cellWidget(r, 3)
             target = combo.currentData() if combo else UNMATCHED_KEY
-            path = self.batch_table.item(r, 0).data(Qt.ItemDataRole.UserRole)
             if not target or target == UNMATCHED_KEY:
-                fname = self.batch_table.item(r, 0).text()
-                self._err(
-                    tr("dlg.version.error.file_unmatched").format(file=fname)
-                )
-                return None
+                # 跳过未匹配 — 留给 _on_accept 二次弹窗
+                continue
+            path = self.batch_table.item(r, 0).data(Qt.ItemDataRole.UserRole)
             if not os.path.exists(path):
                 self._err(tr("dlg.version.error.file_not_exist").format(path=path))
                 return None
