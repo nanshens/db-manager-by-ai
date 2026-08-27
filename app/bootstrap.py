@@ -1,4 +1,4 @@
-"""启动初始化:日志 + DB + 服务注册中心"""
+"""启动初始化:日志 + DB + 服务注册中心 + i18n"""
 from __future__ import annotations
 import logging
 from pathlib import Path
@@ -6,6 +6,7 @@ from pathlib import Path
 from app.paths import ensure_dirs, db_path, log_path
 from app import config as app_config
 from app.services.registry import Registry
+from app.ui import i18n
 
 
 def setup_logging() -> None:
@@ -35,6 +36,8 @@ def bootstrap() -> tuple[Path, str, str, Registry]:
 
     theme = app_config.get_theme()
     lang = app_config.get_lang()
+    # i18n 加载放在 bootstrap 里,这样测试和单文件入口能直接 tr()
+    i18n.load(lang)
     logging.info(f"Config: theme={theme}, lang={lang}, sidebar={app_config.get_sidebar()}")
 
     return db, theme, lang, registry

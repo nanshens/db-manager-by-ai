@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
+from PySide6.QtCore import QObject, Signal
+
 from app.repos.db import init_db, get_connection
 from app.repos.project_repo import ProjectRepo
 from app.repos.table_repo import TableRepo
@@ -20,6 +22,12 @@ from app.services.excel_template_service import ExcelTemplateService
 from app.services.diff_service import DiffService
 
 
+class _EventBus(QObject):
+    """全局事件总线 — 用于跨 tab 通知(如版本变化时刷新 diff 页面)"""
+    data_version_changed = Signal()  # 数据版本列表变了(创建/删除)
+    table_changed = Signal()         # 表列表变了(创建/删除/字段改动)
+
+
 class Registry:
     """单例服务注册表,启动时初始化一次"""
     _instance: Optional["Registry"] = None
@@ -27,6 +35,9 @@ class Registry:
     def __init__(self, db_path: Path):
         self.db_path = db_path
         init_db(db_path)
+
+        # 全局事件总线
+        self.bus = _EventBus()
 
         # Repos
         self.project_repo = ProjectRepo(db_path)
