@@ -120,11 +120,16 @@ class DiffResult:
 
 class DiffEngine:
     def compute(self, left_path: str, right_path: str, config: DiffConfig) -> DiffResult:
-        if not config.pk_columns:
-            raise ValueError("At least 1 PK column required")
-
         left_df = _read(left_path)
         right_df = _read(right_path)
+
+        # 如果没指定 PK 列,用行号当虚拟 PK(_rowid),并排除它参与列差异比较
+        if not config.pk_columns:
+            left_df = left_df.with_row_index(name="_rowid", offset=0)
+            right_df = right_df.with_row_index(name="_rowid", offset=0)
+            pk_cols = ["_rowid"]
+        else:
+            pk_cols = list(config.pk_columns)
 
         # 列对齐(以左为准)
         all_cols = list(left_df.columns)
@@ -137,15 +142,16 @@ class DiffEngine:
         right_df = right_df.select(all_cols + extra_right)
         left_df = left_df.select(all_cols)
 
-        # 比较列
-        cmp_cols = config.effective_compare_columns(all_cols)
+        # 比较列(排除虚拟 PK 列)
+        user_cols = [c for c in all_cols if c not in pk_cols]
+        cmp_cols = config.effective_compare_columns(user_cols)
         # Normalize
         left_n = _normalize(left_df, cmp_cols, config.case_sensitive, config.trim_whitespace)
         right_n = _normalize(right_df, cmp_cols, config.case_sensitive, config.trim_whitespace)
 
         # 主键索引
-        l_index = {tuple(r[c] for c in config.pk_columns): r for r in left_n.to_dicts()}
-        r_index = {tuple(r[c] for c in config.pk_columns): r for r in right_n.to_dicts()}
+        l_index = {tuple(r[c] for c in pk_cols): r for r in left_n.to_dicts()}
+        r_index = {tuple(r[c] for c in pk_cols): r for r in right_n.to_dicts()}
 
         only_left = []
         only_right = []
