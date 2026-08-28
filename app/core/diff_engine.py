@@ -119,74 +119,71 @@ class DiffResult:
 
 
 class DiffEngine:
-    def compute(self, left_path: str, right_path: str, config: DiffConfig) -> DiffResult:
+    def compute(self, left_path: str, right_path: str, config: DiffConfig) -> tuple[DiffResult, list[dict], list[dict], list[str]]:
+        """set-based 内容比较:行号不重要,只看 A 的某行内容是否在 B 集合里存在。
+
+        Returns: (DiffResult, left_rows, right_rows, common_cols)
+        - left_rows / right_rows: 完整行数据(用 list index 当 row_id)
+        - common_cols: A/B 共同列(用于 UI 展示)
+        """
         left_df = _read(left_path)
         right_df = _read(right_path)
 
-        # 如果没指定 PK 列,用行号当虚拟 PK(_rowid),并排除它参与列差异比较
-        if not config.pk_columns:
-            left_df = left_df.with_row_index(name="_rowid", offset=0)
-            right_df = right_df.with_row_index(name="_rowid", offset=0)
-            pk_cols = ["_rowid"]
-        else:
-            pk_cols = list(config.pk_columns)
-
         # 列对齐(以左为准)
         all_cols = list(left_df.columns)
-        # 缺失的右列填 null
         for c in all_cols:
             if c not in right_df.columns:
                 right_df = right_df.with_columns(pl.lit(None).alias(c))
-        # 右多余的列保留(便于看 cell diff)
         extra_right = [c for c in right_df.columns if c not in left_df.columns]
         right_df = right_df.select(all_cols + extra_right)
         left_df = left_df.select(all_cols)
 
-        # 比较列(排除虚拟 PK 列)
-        user_cols = [c for c in all_cols if c not in pk_cols]
-        cmp_cols = config.effective_compare_columns(user_cols)
+        # 关键:用 compare_columns 做内容 key(set-based)
+        if config.compare_columns:
+            cmp_cols = list(config.compare_columns)
+        else:
+            cmp_cols = list(all_cols)
+        if not cmp_cols:
+            raise ValueError("No compare columns")
+
+        # 共同列(用于 UI)
+        common_cols = [c for c in all_cols if c in (right_df.columns)]
+
         # Normalize
         left_n = _normalize(left_df, cmp_cols, config.case_sensitive, config.trim_whitespace)
         right_n = _normalize(right_df, cmp_cols, config.case_sensitive, config.trim_whitespace)
 
-        # 主键索引
-        l_index = {tuple(r[c] for c in pk_cols): r for r in left_n.to_dicts()}
-        r_index = {tuple(r[c] for c in pk_cols): r for r in right_n.to_dicts()}
+        # 转成 (key, row) list
+        def _key(r):
+            return tuple(r[c] for c in cmp_cols)
+        left_list = [(_key(r), r) for r in left_n.to_dicts()]
+        right_list = [(_key(r), r) for r in right_n.to_dicts()]
+
+        # set-based:每行的 key 是否在另一边的 keys 集合里
+        right_keys = set(k for k, _ in right_list)
+        left_keys = set(k for k, _ in left_list)
 
         only_left = []
         only_right = []
-        modified = []
         unchanged = 0
+        for k, r in left_list:
+            if k in right_keys:
+                unchanged += 1
+            else:
+                only_left.append(_RowDiff(key=k, kind="only_left", left_row=dict(r)))
+        for k, r in right_list:
+            if k not in left_keys:
+                only_right.append(_RowDiff(key=k, kind="only_right", right_row=dict(r)))
+
         col_stats: dict[str, int] = {c: 0 for c in cmp_cols}
 
-        for k, lr in l_index.items():
-            if k not in r_index:
-                only_left.append(_RowDiff(key=k, kind="only_left", left_row=dict(lr)))
-                continue
-            rr = r_index[k]
-            cell_diffs = []
-            for c in cmp_cols:
-                lv = lr.get(c)
-                rv = rr.get(c)
-                if lv != rv:
-                    cell_diffs.append(_CellDiff(col=c, left=lv, right=rv))
-                    col_stats[c] += 1
-            if cell_diffs:
-                # cell_diffs 同时也包含 ignored 列的实际值,便于显示
-                modified.append(_RowDiff(
-                    key=k, kind="modified",
-                    left_row=dict(lr), right_row=dict(rr),
-                    cell_diffs=cell_diffs,
-                ))
-            else:
-                unchanged += 1
-        for k, rr in r_index.items():
-            if k not in l_index:
-                only_right.append(_RowDiff(key=k, kind="only_right", right_row=dict(rr)))
-
-        return DiffResult(
-            only_left=only_left, only_right=only_right, modified=modified,
+        result = DiffResult(
+            only_left=only_left, only_right=only_right, modified=[],
             unchanged_count=unchanged,
-            total_left=len(l_index), total_right=len(r_index),
+            total_left=len(left_list), total_right=len(right_list),
             column_diff_stats=col_stats,
         )
+        # 完整行数据(原始列名,不是 normalize 后的)— 用 list index 当行号
+        left_rows = left_df.to_dicts()
+        right_rows = right_df.to_dicts()
+        return result, left_rows, right_rows, common_cols

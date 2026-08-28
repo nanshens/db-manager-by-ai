@@ -93,15 +93,22 @@ class DiffPairWorker(QRunnable):
     def run(self):
         try:
             engine = DiffEngine()
-            res = engine.compute(self.match.a_path, self.match.b_path, self.config)
+            res, left_rows, right_rows, common_cols = engine.compute(
+                self.match.a_path, self.match.b_path, self.config
+            )
             self.signals.finished.emit({
                 "match": {
                     "a_table": self.match.a_table,
                     "a_source_label": self.match.a_source_label,
+                    "a_path": self.match.a_path,
                     "b_table": self.match.b_table,
                     "b_source_label": self.match.b_source_label,
+                    "b_path": self.match.b_path,
                 },
                 "result": res.to_dict(),
+                "left_rows": left_rows,
+                "right_rows": right_rows,
+                "common_cols": common_cols,
             })
         except Exception as e:
             import traceback
@@ -439,17 +446,18 @@ class MappingRow(QFrame):
         h.setContentsMargins(8, 6, 8, 6)
         h.setSpacing(6)
 
-        # A 表名(固定宽度,只显示名字,source label 放 tooltip)
+        # A 表名(加宽,放更多空间)
         a_lbl = QLabel(f"📄 <b>{a_table}</b>")
         a_lbl.setTextFormat(Qt.TextFormat.RichText)
-        a_lbl.setMinimumWidth(120)
-        a_lbl.setMaximumWidth(160)
+        a_lbl.setMinimumWidth(180)
+        a_lbl.setMaximumWidth(240)
+        a_lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         a_lbl.setToolTip(f"{a_table}\n来源: {a_label}")
         h.addWidget(a_lbl)
 
         h.addWidget(QLabel("→"))
 
-        # B 表下拉(适中宽度)
+        # B 表下拉(加宽)
         self.b_combo = QComboBox()
         self.b_combo.addItem(tr("diff.mapping.skip"), None)
         for tn, sl in b_options:
@@ -459,8 +467,9 @@ class MappingRow(QFrame):
                 if self.b_combo.itemData(i) == default_b:
                     self.b_combo.setCurrentIndex(i)
                     break
-        self.b_combo.setMinimumWidth(120)
-        self.b_combo.setMaximumWidth(180)
+        self.b_combo.setMinimumWidth(180)
+        self.b_combo.setMaximumWidth(240)
+        self.b_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         h.addWidget(self.b_combo)
 
         # 分隔
@@ -794,12 +803,11 @@ class MappingPanel(QFrame):
 # ============================================================
 
 class ResultDialog(QDialog):
-    """对比结果弹窗 — 独立大窗口,左侧匹配对列表,右侧详情 tabs"""
+    """对比结果弹窗 — 5 个 tab 全部用 QTableWidget 真实 cell + 各自文件原始行号"""
 
     def __init__(self, results: list[dict], errors: list[tuple[str, str]], parent=None):
         super().__init__(parent)
         self.setWindowTitle(tr("diff.result.title"))
-        # 独立窗口(有最大化/最小化按钮)
         self.setWindowFlags(
             Qt.WindowType.Window |
             Qt.WindowType.WindowMaximizeButtonHint |
@@ -819,16 +827,15 @@ class ResultDialog(QDialog):
         status.setObjectName("Card")
         st = QHBoxLayout(status)
         st.setContentsMargins(16, 12, 16, 12)
-        # 总数统计
         total_add = sum(len(r["result"]["only_right"]) for r in results)
         total_del = sum(len(r["result"]["only_left"]) for r in results)
-        total_mod = sum(len(r["result"]["modified"]) for r in results)
+        total_unch = sum(r["result"]["unchanged_count"] for r in results)
         n_ok = len(results)
         n_err = len(errors)
         summary_lbl = QLabel(
             tr("diff.result.total").format(
                 n_ok=n_ok, n_err=n_err,
-                add=total_add, delete=total_del, modify=total_mod,
+                add=total_add, delete=total_del, unchanged=total_unch,
             )
         )
         summary_lbl.setStyleSheet("font-size: 14px; font-weight: 700;")
@@ -840,48 +847,29 @@ class ResultDialog(QDialog):
         st.addWidget(close_btn)
         layout.addWidget(status)
 
-        # 主体: 左侧匹配对 + 右侧详情
+        # 主体
         body = QSplitter(Qt.Orientation.Horizontal)
         body.setHandleWidth(1)
-
-        # 左侧匹配对列表
         left = QFrame()
         left.setMinimumWidth(220)
         left.setMaximumWidth(360)
         ll = QVBoxLayout(left)
         ll.setContentsMargins(8, 8, 8, 8)
-        ll.setSpacing(4)
         ll.addWidget(QLabel(tr("diff.result.pairs")))
         self.pair_list = QListWidget()
         self.pair_list.itemSelectionChanged.connect(self._on_pair_select)
         ll.addWidget(self.pair_list, 1)
         body.addWidget(left)
 
-        # 右侧详情
         self.detail_tabs = QTabWidget()
         self.detail_tabs.setDocumentMode(True)
-        # 文件内容(双列左右)
-        self.content_view = QTableWidget()
-        self.content_view.setColumnCount(2)
-        self.content_view.setHorizontalHeaderLabels(["A", "B"])
-        self.content_view.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.content_view.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        self.content_view.verticalHeader().setVisible(False)
-        self.content_view.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.content_view.setStyleSheet(
-            "QTableWidget { background: #0b1220; color: #e2e8f0;"
-            "  border: 1px solid #334155; gridline-color: #1e293b; font-family: Consolas; font-size: 11px; }"
-            "QHeaderView::section { background: #1e293b; color: #cbd5e1;"
-            "  padding: 8px 12px; font-weight: 600; }"
-            "QTableWidget::item { padding: 4px 8px; }"
-        )
-        self.missing_a_view = self._make_view()
-        self.missing_b_view = self._make_view()
-        self.modified_view = self._make_view()
-        self.unchanged_view = self._make_view()
-        self.diff_view = self._make_view()
+        # 5 个 tab 全部 QTableWidget
+        self.missing_a_view = self._make_table()
+        self.missing_b_view = self._make_table()
+        self.content_view = self._make_table()
+        self.unchanged_view = self._make_table()
+        self.diff_view = self._make_table()
         self.detail_tabs.addTab(self.content_view, tr("diff.result.content"))
-        self.detail_tabs.addTab(self.modified_view, tr("diff.result.modified"))
         self.detail_tabs.addTab(self.missing_a_view, tr("diff.result.missing_a"))
         self.detail_tabs.addTab(self.missing_b_view, tr("diff.result.missing_b"))
         self.detail_tabs.addTab(self.unchanged_view, tr("diff.result.unchanged"))
@@ -890,36 +878,39 @@ class ResultDialog(QDialog):
         body.setSizes([280, 1120])
         layout.addWidget(body, 1)
 
-        # 填数据
         self._results_by_key: dict[str, dict] = {}
         for r in results:
             m = r["match"]
-            key = f"{m['a_table']} → {m['b_table']}"
+            key = f"{m['a_table']} -> {m['b_table']}"
             self._results_by_key[key] = r
             res = r["result"]
             n_add = len(res["only_right"])
             n_del = len(res["only_left"])
-            n_mod = len(res["modified"])
-            item = QListWidgetItem(f"✓ {key}  (+{n_add}/-{n_del}/~{n_mod})")
+            item = QListWidgetItem(f"OK {key}  (-{n_del}/+{n_add}/={res['unchanged_count']})")
             item.setData(Qt.ItemDataRole.UserRole, key)
             self.pair_list.addItem(item)
         for a, msg in errors:
-            item = QListWidgetItem(f"❌ {a}  ({msg[:40]})")
+            item = QListWidgetItem(f"ERR {a}  ({msg[:40]})")
             from PySide6.QtGui import QColor
             item.setForeground(QColor("#ef4444"))
             self.pair_list.addItem(item)
         if self.pair_list.count() > 0:
             self.pair_list.setCurrentRow(0)
 
-    def _make_view(self) -> QPlainTextEdit:
-        v = QPlainTextEdit()
-        v.setReadOnly(True)
-        v.setStyleSheet(
-            "font-family: Consolas, monospace; font-size: 12px; "
-            "background: #0b1220; color: #e2e8f0; border: 1px solid #334155; border-radius: 6px;"
-            "padding: 8px;"
+    def _make_table(self) -> QTableWidget:
+        t = QTableWidget()
+        t.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        t.verticalHeader().setVisible(False)
+        t.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        t.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        t.setStyleSheet(
+            "QTableWidget { background: #0b1220; color: #e2e8f0;"
+            "  border: 1px solid #334155; gridline-color: #1e293b; font-family: Consolas; font-size: 11px; }"
+            "QHeaderView::section { background: #1e293b; color: #cbd5e1;"
+            "  padding: 8px 12px; font-weight: 600; }"
+            "QTableWidget::item { padding: 4px 8px; }"
         )
-        return v
+        return t
 
     def _on_pair_select(self) -> None:
         items = self.pair_list.selectedItems()
@@ -931,88 +922,183 @@ class ResultDialog(QDialog):
             return
         self._render_pair(r)
 
+    def _row_key(self, row: dict, common_cols: list[str]) -> tuple:
+        return tuple(row.get(c) for c in common_cols)
+
     def _render_pair(self, r: dict) -> None:
         m = r["match"]
         res = r["result"]
+        common_cols = r.get("common_cols", [])
+        left_rows = r.get("left_rows", [])
+        right_rows = r.get("right_rows", [])
+        if not common_cols:
+            if left_rows:
+                common_cols = list(left_rows[0].keys())
+            elif right_rows:
+                common_cols = list(right_rows[0].keys())
+
         n_add = len(res["only_right"])
         n_del = len(res["only_left"])
-        n_mod = len(res["modified"])
         n_unch = res["unchanged_count"]
-        summary = (f"=== {m['a_table']}  →  {m['b_table']} ===\n"
-                   f"左行数: {res['total_left']}    右行数: {res['total_right']}\n"
-                   f"+新增: {n_add}    -删除: {n_del}    ~修改: {n_mod}    =未变: {n_unch}\n"
-                   f"A: {m.get('a_source_label', '')}\n"
-                   f"B: {m.get('b_source_label', '')}\n")
         # tab 标题带数字
         self.detail_tabs.setTabText(0, tr("diff.result.content"))
-        self.detail_tabs.setTabText(1, f"{tr('diff.result.modified')} ({n_mod})")
-        self.detail_tabs.setTabText(2, f"{tr('diff.result.missing_a')} ({n_del})")
-        self.detail_tabs.setTabText(3, f"{tr('diff.result.missing_b')} ({n_add})")
-        self.detail_tabs.setTabText(4, f"{tr('diff.result.unchanged')} ({n_unch})")
-        self.detail_tabs.setTabText(5, tr("diff.result.diff_text"))
-        # 缺 A
-        lines = [summary, "", "--- A 有但 B 没有 ---"]
-        for row in res["only_left"][:200]:
-            lines.append(f"  key={row['key']}  {row.get('left_row', '')}")
-        if len(res["only_left"]) > 200:
-            lines.append(f"  ... +{len(res['only_left']) - 200} more")
-        self.missing_a_view.setPlainText("\n".join(lines))
-        # 缺 B
-        lines = [summary, "", "--- B 有但 A 没有 ---"]
-        for row in res["only_right"][:200]:
-            lines.append(f"  key={row['key']}  {row.get('right_row', '')}")
-        if len(res["only_right"]) > 200:
-            lines.append(f"  ... +{len(res['only_right']) - 200} more")
-        self.missing_b_view.setPlainText("\n".join(lines))
-        # 修改
-        lines = [summary, "", "--- 修改的行 ---"]
-        for row in res["modified"][:200]:
-            lines.append(f"  key={row['key']}")
-            for cd in row.get("cell_diffs", []):
-                lines.append(f"    {cd['col']}: {cd['left']} → {cd['right']}")
-        if len(res["modified"]) > 200:
-            lines.append(f"  ... +{len(res['modified']) - 200} more")
-        self.modified_view.setPlainText("\n".join(lines))
-        # 未变
-        self.unchanged_view.setPlainText(
-            f"{summary}\n(未变化的行共 {n_unch} 条 — 内容一致)"
-        )
-        # 差分摘要
-        self.diff_view.setPlainText(summary)
-        # 文件内容(左右两列)
-        self._render_content(r)
+        self.detail_tabs.setTabText(1, f"{tr('diff.result.missing_a')} ({n_del})")
+        self.detail_tabs.setTabText(2, f"{tr('diff.result.missing_b')} ({n_add})")
+        self.detail_tabs.setTabText(3, f"{tr('diff.result.unchanged')} ({n_unch})")
+        self.detail_tabs.setTabText(4, tr("diff.result.diff_text"))
 
-    def _render_content(self, r: dict) -> None:
-        m = r["match"]
-        try:
-            import polars as pl
-            def _read(p):
-                if p.endswith((".csv", ".tsv")):
-                    sep = "\t" if p.endswith(".tsv") else ","
-                    return pl.read_csv(p, separator=sep, infer_schema_length=10000, ignore_errors=True)
-                return pl.read_excel(p)
-            l_df = _read(m["a_path"])
-            r_df = _read(m["b_path"])
-            common = [c for c in l_df.columns if c in r_df.columns]
-            l_data = l_df.select(common).head(200).to_dicts()
-            r_data = r_df.select(common).head(200).to_dicts()
-            n = max(len(l_data), len(r_data))
-            self.content_view.setRowCount(n)
-            self.content_view.setHorizontalHeaderLabels([
-                f"A — {m['a_table']}  ({m.get('a_source_label', '')})",
-                f"B — {m['b_table']}  ({m.get('b_source_label', '')})",
-            ])
-            for i in range(n):
-                l_row = l_data[i] if i < len(l_data) else {}
-                r_row = r_data[i] if i < len(r_data) else {}
-                a_text = "  ".join(f"{k}={v}" for k, v in l_row.items())
-                b_text = "  ".join(f"{k}={v}" for k, v in r_row.items())
-                self.content_view.setItem(i, 0, QTableWidgetItem(a_text))
-                self.content_view.setItem(i, 1, QTableWidgetItem(b_text))
-        except Exception as e:
-            self.content_view.setRowCount(1)
-            self.content_view.setItem(0, 0, QTableWidgetItem("(load failed)"))
-            self.content_view.setItem(0, 1, QTableWidgetItem(str(e)))
+        # 缺 A
+        self._render_diff_table(
+            self.missing_a_view,
+            [(i + 1, lr) for i, lr in enumerate(left_rows)],
+            res["only_left"],
+            common_cols,
+        )
+        # 多 B
+        self._render_diff_table(
+            self.missing_b_view,
+            [(i + 1, rr) for i, rr in enumerate(right_rows)],
+            res["only_right"],
+            common_cols,
+        )
+        # 文件内容
+        self._render_content_table(left_rows, right_rows, common_cols)
+        # 未变
+        self._render_summary_table(self.unchanged_view, [
+            (tr("diff.result.unchanged"), n_unch),
+            (tr("diff.result.missing_a"), n_del),
+            (tr("diff.result.missing_b"), n_add),
+        ])
+        # 差分摘要
+        self._render_summary_table(self.diff_view, [
+            ("A 表", m["a_table"]),
+            ("B 表", m["b_table"]),
+            ("A 来源", m.get("a_source_label", "")),
+            ("B 来源", m.get("b_source_label", "")),
+            ("A 总行数", str(res["total_left"])),
+            ("B 总行数", str(res["total_right"])),
+            ("缺(A 有 B 无)", str(n_del)),
+            ("多(B 有 A 无)", str(n_add)),
+            ("未变", str(n_unch)),
+        ])
+
+    def _render_diff_table(self, table: QTableWidget,
+                           all_rows_with_idx, diff_list,
+                           common_cols: list[str]) -> None:
+        """把 diff_list 对应到 all_rows 拿到文件原始行号,真实 cell 显示。"""
+        table.clear()
+        headers = [tr("diff.result.col.row_id")] + list(common_cols)
+        table.setColumnCount(len(headers))
+        table.setHorizontalHeaderLabels(headers)
+        # 用 content_key 找匹配的行
+        diff_keys = set(tuple(d.get("key", ())) for d in diff_list)
+        rows_to_show = []
+        for original_idx, row in all_rows_with_idx:
+            key = self._row_key(row, common_cols)
+            if key in diff_keys:
+                rows_to_show.append((original_idx, row))
+        rows_to_show = rows_to_show[:1000]
+        table.setRowCount(len(rows_to_show))
+        from PySide6.QtGui import QColor
+        red = QColor("#ef4444")
+        muted = QColor("#64748b")
+        for r_i, (orig_idx, row) in enumerate(rows_to_show):
+            rowid_item = QTableWidgetItem(str(orig_idx))
+            rowid_item.setForeground(muted)
+            table.setItem(r_i, 0, rowid_item)
+            for c_i, c in enumerate(common_cols):
+                val = row.get(c)
+                item = QTableWidgetItem("" if val is None else str(val))
+                item.setForeground(red)
+                table.setItem(r_i, 1 + c_i, item)
+        if table.columnCount() > 0:
+            hdr = table.horizontalHeader()
+            hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+            for c in range(1, table.columnCount()):
+                hdr.setSectionResizeMode(c, QHeaderView.ResizeMode.Stretch)
+
+    def _render_content_table(self, left_rows, right_rows, common_cols) -> None:
+        """文件内容 tab — 上下两段(A 段 + B 段)。"""
+        self.content_view.clear()
+        all_cols = common_cols
+        if not all_cols:
+            if left_rows:
+                all_cols = list(left_rows[0].keys())
+            elif right_rows:
+                all_cols = list(right_rows[0].keys())
+        if not all_cols:
+            return
+        # 列: 行号 | A·col1 | A·col2 | ... | 行号 | B·col1 | B·col2 | ...
+        a_col_count = 1 + len(all_cols)
+        b_col_count = 1 + len(all_cols)
+        total_cols = a_col_count + b_col_count
+        total_rows = len(left_rows) + len(right_rows) + 1
+        self.content_view.setRowCount(total_rows)
+        self.content_view.setColumnCount(total_cols)
+        headers = (
+            [tr("diff.result.col.row_id")] + [f"A · {c}" for c in all_cols] +
+            [tr("diff.result.col.row_id")] + [f"B · {c}" for c in all_cols]
+        )
+        self.content_view.setHorizontalHeaderLabels(headers)
+        from PySide6.QtGui import QColor
+        red = QColor("#ef4444")
+        green = QColor("#22c55e")
+        muted = QColor("#64748b")
+        row = 0
+        # A 段
+        for i, lr in enumerate(left_rows, 1):
+            rowid = QTableWidgetItem(str(i))
+            rowid.setForeground(muted)
+            self.content_view.setItem(row, 0, rowid)
+            for c_i, c in enumerate(all_cols):
+                val = lr.get(c)
+                item = QTableWidgetItem("" if val is None else str(val))
+                item.setForeground(green)
+                self.content_view.setItem(row, 1 + c_i, item)
+            row += 1
+        # 分隔
+        sep = QTableWidgetItem("--- B 数据 ---")
+        sep.setForeground(muted)
+        self.content_view.setItem(row, 0, sep)
+        for c_i in range(1, total_cols):
+            self.content_view.setItem(row, c_i, QTableWidgetItem(""))
+        row += 1
+        # B 段
+        for i, rr in enumerate(right_rows, 1):
+            rowid = QTableWidgetItem(str(i))
+            rowid.setForeground(muted)
+            self.content_view.setItem(row, a_col_count, rowid)
+            for c_i, c in enumerate(all_cols):
+                val = rr.get(c)
+                item = QTableWidgetItem("" if val is None else str(val))
+                item.setForeground(red)
+                self.content_view.setItem(row, a_col_count + 1 + c_i, item)
+            row += 1
+        # 列宽
+        hdr = self.content_view.horizontalHeader()
+        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(a_col_count, QHeaderView.ResizeMode.ResizeToContents)
+        for c in range(1, a_col_count):
+            hdr.setSectionResizeMode(c, QHeaderView.ResizeMode.Stretch)
+        for c in range(a_col_count + 1, total_cols):
+            hdr.setSectionResizeMode(c, QHeaderView.ResizeMode.Stretch)
+
+    def _render_summary_table(self, table: QTableWidget, rows) -> None:
+        """通用:用 QTableWidget 显示 [指标, 值] 二列表。"""
+        table.clear()
+        table.setColumnCount(2)
+        table.setRowCount(len(rows))
+        table.setHorizontalHeaderLabels([tr("diff.result.col.metric"), tr("diff.result.col.value")])
+        from PySide6.QtGui import QColor
+        muted = QColor("#64748b")
+        for i, (k, v) in enumerate(rows):
+            k_item = QTableWidgetItem(str(k))
+            k_item.setForeground(muted)
+            table.setItem(i, 0, k_item)
+            table.setItem(i, 1, QTableWidgetItem(str(v)))
+        hdr = table.horizontalHeader()
+        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
 
 
 # ============================================================
