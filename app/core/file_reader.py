@@ -17,7 +17,17 @@ def detect_format(path: str) -> str:
 
 
 def infer_columns_from_csv(path: str, sep: str = ",", encoding: str = "utf-8-sig") -> list[str]:
-    """轻量:读前一行作为列名"""
+    """轻量:读前一行作为列名。fallback:依次试 utf-8-sig / utf-8 / gbk / cp932 / latin-1"""
+    for enc in [encoding, "utf-8-sig", "utf-8", "gbk", "cp932", "shift_jis", "latin-1"]:
+        try:
+            with open(path, "r", encoding=enc, errors="strict") as f:
+                line = f.readline()
+            if not line:
+                return []
+            return [c.strip().strip('"').strip("'") for c in line.split(sep)]
+        except (OSError, UnicodeError, UnicodeDecodeError):
+            continue
+    # 全失败:用 replace 模式
     try:
         with open(path, "r", encoding=encoding, errors="replace") as f:
             line = f.readline()

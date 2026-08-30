@@ -32,9 +32,11 @@ class DiffConfig:
 def _read(path: str) -> pl.DataFrame:
     fmt = detect_format(path)
     if fmt == "csv":
-        return pl.read_csv(path, infer_schema_length=10000, ignore_errors=True)
+        return pl.read_csv(path, infer_schema_length=10000, ignore_errors=True,
+                          encoding="utf8-lossy")
     if fmt == "tsv":
-        return pl.read_csv(path, separator="\t", infer_schema_length=10000, ignore_errors=True)
+        return pl.read_csv(path, separator="\t", infer_schema_length=10000, ignore_errors=True,
+                          encoding="utf8-lossy")
     if fmt in ("xlsx", "xls"):
         return pl.read_excel(path)
     raise ValueError(f"Unsupported format: {fmt}")
@@ -50,13 +52,26 @@ def _normalize_str_expr(col: str, case_sensitive: bool, trim: bool) -> pl.Expr:
 
 
 def _normalize(df: pl.DataFrame, cols: list[str], case_sensitive: bool, trim: bool) -> pl.DataFrame:
-    """对指定列做字符串 normalize"""
-    if not cols or (case_sensitive and not trim):
+    """对指定列做字符串 normalize
+    - trim: 去首尾空白 + 内部多空白合成单空格 + 空字符串→None
+    - case_sensitive=False: 统一转小写
+    """
+    if not cols:
         return df
     exprs = []
     for c in df.columns:
         if c in cols and df.schema[c] == pl.Utf8:
-            exprs.append(_normalize_str_expr(c, case_sensitive, trim).alias(c))
+            e = pl.col(c).cast(pl.Utf8)
+            if trim:
+                e = e.str.strip_chars()
+                # 多空白合一
+                e = e.str.replace_all(r"\s+", " ")
+            # 空字符串→null
+            e = e.map_elements(lambda s: None if (s is None or str(s).strip() == "") else s,
+                                return_dtype=pl.Utf8)
+            if not case_sensitive:
+                e = e.str.to_lowercase()
+            exprs.append(e.alias(c))
         else:
             exprs.append(pl.col(c))
     return df.select(exprs)
@@ -183,7 +198,8 @@ class DiffEngine:
             total_left=len(left_list), total_right=len(right_list),
             column_diff_stats=col_stats,
         )
-        # 完整行数据(原始列名,不是 normalize 后的)— 用 list index 当行号
-        left_rows = left_df.to_dicts()
-        right_rows = right_df.to_dicts()
+        # 关键:传 normalize 后的 rows 给 UI,这样 _row_key() 算的 key 跟 only_left[i]["key"] 一致
+        # (only_left 的 key 是 normalize 后的 cmp_cols tuple)
+        left_rows = left_n.to_dicts()
+        right_rows = right_n.to_dicts()
         return result, left_rows, right_rows, common_cols

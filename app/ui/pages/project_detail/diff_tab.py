@@ -15,13 +15,13 @@ from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass, field
 from PySide6.QtCore import Qt, QThreadPool, QRunnable, Signal, QObject
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QBrush, QPalette
 from PySide6.QtWidgets import (
     QHBoxLayout, QVBoxLayout, QPushButton, QLabel, QFrame, QComboBox, QCheckBox,
     QPlainTextEdit, QListWidget, QListWidgetItem, QMessageBox, QWidget, QFileDialog,
     QProgressBar, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
     QTabWidget, QSizePolicy, QMenu, QInputDialog, QDialog, QFormLayout,
-    QSplitter,
+    QSplitter, QStyledItemDelegate,
 )
 import qtawesome as qta
 
@@ -802,6 +802,347 @@ class MappingPanel(QFrame):
 # ResultDialog — 结果弹窗(独立窗口,可最大化)
 # ============================================================
 
+class ExportSqlDialog(QDialog):
+    """导出 SQL 弹窗 — 缺(DELETE) / 新增(INSERT) 两个 tab,各可复制 / 导出 .sql"""
+
+    def __init__(self, match: dict, common_cols: list[str],
+                 only_left: list, only_right: list, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("导出 SQL")
+        self.resize(900, 600)
+        self._match = match
+        self._common_cols = common_cols
+        self._only_left = only_left    # 多(A 有 B 无)— 新增
+        self._only_right = only_right  # 缺(B 有 A 无)— 删除
+        self._build()
+
+    def _build(self):
+        v = QVBoxLayout(self)
+        v.setContentsMargins(12, 12, 12, 12)
+        v.setSpacing(8)
+        # 顶部:状态
+        head = QLabel(f"匹配: {self._match['a_table']} → {self._match['b_table']}  ·  "
+                      f"新增 {len(self._only_left)} 条 · 缺少 {len(self._only_right)} 条")
+        head.setStyleSheet("font-weight: 700; font-size: 13px;")
+        v.addWidget(head)
+        # PK 选择(用于 DELETE WHERE / INSERT 列名)
+        pk_row = QHBoxLayout()
+        pk_row.addWidget(QLabel("主键列(PK):"))
+        self.pk_combo = QComboBox()
+        self.pk_combo.setMinimumWidth(160)
+        # 候选:common_cols + 自动从项目表里推断
+        candidates = list(self._common_cols) if self._common_cols else []
+        # 尝试从项目找 supplier_id / id
+        if reg() and hasattr(reg(), "table_service"):
+            try:
+                pid = self._get_project_id()
+                if pid:
+                    tables = reg().table_service.list_by_project(pid)
+                    for t in tables:
+                        if t.name == self._match["a_table"]:
+                            for c in t.columns:
+                                if c.pk and c.name not in candidates:
+                                    candidates.insert(0, c.name)
+                            break
+            except Exception:
+                pass
+        if not candidates:
+            candidates = [self._common_cols[0]] if self._common_cols else ["id"]
+        self.pk_combo.addItems(candidates)
+        self.pk_combo.setEditable(True)
+        pk_row.addWidget(self.pk_combo)
+        # 让用户选导出哪些列
+        pk_row.addSpacing(20)
+        pk_row.addWidget(QLabel("导出列:"))
+        self.cols_combo = QComboBox()
+        self.cols_combo.addItem("全部 common 列", "all")
+        self.cols_combo.addItem("仅主键", "pk")
+        self.cols_combo.setMinimumWidth(120)
+        pk_row.addWidget(self.cols_combo)
+        pk_row.addStretch()
+        # 重新生成
+        refresh = QPushButton("刷新")
+        refresh.setObjectName("Ghost")
+        refresh.clicked.connect(self._refresh)
+        pk_row.addWidget(refresh)
+        v.addLayout(pk_row)
+        # Tabs
+        self.tabs = QTabWidget()
+        self.tabs.setDocumentMode(True)
+        self.delete_view = QPlainTextEdit()
+        self.delete_view.setReadOnly(True)
+        self.delete_view.setStyleSheet("font-family: Consolas; font-size: 12px; background: #0b1220; color: #e2e8f0;")
+        self.insert_view = QPlainTextEdit()
+        self.insert_view.setReadOnly(True)
+        self.insert_view.setStyleSheet("font-family: Consolas; font-size: 12px; background: #0b1220; color: #e2e8f0;")
+        self.tabs.addTab(self.delete_view, f"删除 SQL (缺 {len(self._only_right)} 条)")
+        self.tabs.addTab(self.insert_view, f"新增 SQL (新 {len(self._only_left)} 条)")
+        v.addWidget(self.tabs, 1)
+        # 按钮
+        btn_row = QHBoxLayout()
+        copy_del = QPushButton("复制 DELETE 到剪贴板")
+        copy_del.clicked.connect(lambda: self._copy(self.delete_view.toPlainText()))
+        btn_row.addWidget(copy_del)
+        exp_del = QPushButton("导出 .sql")
+        exp_del.clicked.connect(lambda: self._export(self.delete_view.toPlainText(), "delete"))
+        btn_row.addWidget(exp_del)
+        btn_row.addSpacing(20)
+        copy_ins = QPushButton("复制 INSERT 到剪贴板")
+        copy_ins.clicked.connect(lambda: self._copy(self.insert_view.toPlainText()))
+        btn_row.addWidget(copy_ins)
+        exp_ins = QPushButton("导出 .sql")
+        exp_ins.clicked.connect(lambda: self._export(self.insert_view.toPlainText(), "insert"))
+        btn_row.addWidget(exp_ins)
+        btn_row.addStretch()
+        close = QPushButton("关闭")
+        close.clicked.connect(self.accept)
+        btn_row.addWidget(close)
+        v.addLayout(btn_row)
+        self._refresh()
+
+    def _get_project_id(self):
+        p = self.parent()
+        while p:
+            pid = getattr(p, "_project_id", None)
+            if pid:
+                return pid
+            p = p.parent()
+        return None
+
+    def _selected_cols(self):
+        mode = self.cols_combo.currentData()
+        if mode == "pk":
+            pk = self.pk_combo.currentText().strip()
+            return [pk] if pk else (self._common_cols or ["id"])
+        return list(self._common_cols) if self._common_cols else list(self._common_cols or [])
+
+    def _refresh(self):
+        pk = self.pk_combo.currentText().strip()
+        cols = self._selected_cols()
+        if not pk:
+            self.delete_view.setPlainText("-- 请先选 PK 列 --")
+            self.insert_view.setPlainText("-- 请先选 PK 列 --")
+            return
+        # DELETE:对缺(B 唯一)— B 是老版本,要从 B 删 → 用 B 行的 PK 值
+        # 但 left_rows 才是 A, right_rows 是 B(我们没传 left/right rows,只传 only_left/only_right)
+        # only_left 来自 left_df 包含 left_row 字段; only_right 来自 right_df 包含 right_row 字段
+        del_sqls = []
+        for od in self._only_right:
+            row = od.get("right_row", {})
+            if pk in row:
+                v = row[pk]
+                if v is not None:
+                    val = str(v).replace("'", "''")
+                    del_sqls.append(f"DELETE FROM {self._match['b_table']} WHERE {pk} = '{val}';")
+        self.delete_view.setPlainText("\n".join(del_sqls) if del_sqls else "-- 没有缺少数据 --")
+        # INSERT:对新增(A 唯一)— A 行要插到 B → 用 A 行的所有列
+        ins_sqls = []
+        for od in self._only_left:
+            row = od.get("left_row", {})
+            vals = []
+            for c in cols:
+                v = row.get(c, "NULL")
+                if v is None:
+                    vals.append("NULL")
+                else:
+                    s = str(v).replace("'", "''")
+                    vals.append(f"'{s}'")
+            cols_str = ", ".join(cols) if cols else pk
+            vals_str = ", ".join(vals)
+            ins_sqls.append(f"INSERT INTO {self._match['a_table']} ({cols_str}) VALUES ({vals_str});")
+        self.insert_view.setPlainText("\n".join(ins_sqls) if ins_sqls else "-- 没有新增数据 --")
+
+    def _copy(self, text):
+        from PySide6.QtGui import QGuiApplication
+        QGuiApplication.clipboard().setText(text)
+        show_toast("已复制到剪贴板", "success")
+
+    def _export(self, text: str, kind: str):
+        if not text.strip() or text.startswith("--"):
+            QMessageBox.information(self, "提示", "没有可导出的 SQL")
+            return
+        from PySide6.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getSaveFileName(
+            self, "导出 SQL", f"{self._match['a_table']}_{kind}.sql",
+            "SQL files (*.sql);;All files (*)"
+        )
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(text)
+            show_toast(f"已导出到 {path}", "success")
+        except Exception as e:
+            QMessageBox.warning(self, "错误", str(e))
+
+
+class ExportCsvDialog(QDialog):
+    """导出 CSV/TSV 弹窗 — 选导出范围(全部/仅新增/仅缺少),选格式,导出文件"""
+
+    def __init__(self, match: dict, common_cols: list[str],
+                 only_left: list, only_right: list, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("导出 CSV")
+        self.resize(900, 600)
+        self._match = match
+        self._common_cols = common_cols
+        self._only_left = only_left
+        self._only_right = only_right
+        # 用于"全部"导出 — 重新拼 left+right 的 all
+        self._build()
+
+    def _build(self):
+        v = QVBoxLayout(self)
+        v.setContentsMargins(12, 12, 12, 12)
+        v.setSpacing(8)
+        head = QLabel(f"匹配: {self._match['a_table']} → {self._match['b_table']}")
+        head.setStyleSheet("font-weight: 700;")
+        v.addWidget(head)
+        # 导出范围
+        range_row = QHBoxLayout()
+        range_row.addWidget(QLabel("导出范围:"))
+        self.range_combo = QComboBox()
+        self.range_combo.addItem(f"仅新增 (A 有 B 无)  [{len(self._only_left)} 条]", "added")
+        self.range_combo.addItem(f"仅缺少 (B 有 A 无)  [{len(self._only_right)} 条]", "removed")
+        self.range_combo.addItem("全部 (新增 + 缺少)", "all")
+        self.range_combo.currentIndexChanged.connect(self._refresh)
+        range_row.addWidget(self.range_combo)
+        range_row.addSpacing(20)
+        range_row.addWidget(QLabel("格式:"))
+        self.format_combo = QComboBox()
+        self.format_combo.addItem("CSV (.csv)", "csv")
+        self.format_combo.addItem("TSV (.tsv)", "tsv")
+        range_row.addWidget(self.format_combo)
+        range_row.addStretch()
+        v.addLayout(range_row)
+        # 预览
+        self.preview = QPlainTextEdit()
+        self.preview.setReadOnly(True)
+        self.preview.setStyleSheet("font-family: Consolas; font-size: 12px; background: #0b1220; color: #e2e8f0;")
+        v.addWidget(self.preview, 1)
+        # 按钮
+        btn_row = QHBoxLayout()
+        copy_btn = QPushButton("复制内容")
+        copy_btn.clicked.connect(lambda: self._copy(self.preview.toPlainText()))
+        btn_row.addWidget(copy_btn)
+        btn_row.addStretch()
+        export_btn = QPushButton("导出文件")
+        export_btn.setObjectName("Primary")
+        export_btn.clicked.connect(self._export)
+        btn_row.addWidget(export_btn)
+        close_btn = QPushButton("关闭")
+        close_btn.clicked.connect(self.accept)
+        btn_row.addWidget(close_btn)
+        v.addLayout(btn_row)
+        self._refresh()
+
+    def _get_rows(self):
+        mode = self.range_combo.currentData()
+        if mode == "added":
+            return [od.get("left_row", {}) for od in self._only_left], "added"
+        elif mode == "removed":
+            return [od.get("right_row", {}) for od in self._only_right], "removed"
+        else:
+            a = [od.get("left_row", {}) for od in self._only_left]
+            b = [od.get("right_row", {}) for od in self._only_right]
+            return a + b, "all"
+
+    def _refresh(self):
+        rows, _ = self._get_rows()
+        if not self._common_cols:
+            self.preview.setPlainText("-- 没有 common 列 --")
+            return
+        sep = "\t" if self.format_combo.currentData() == "tsv" else ","
+        # 头部
+        lines = [sep.join(self._common_cols)]
+        for r in rows[:200]:
+            cells = []
+            for c in self._common_cols:
+                v = r.get(c, "")
+                if v is None:
+                    cells.append("")
+                else:
+                    s = str(v)
+                    if sep in s or '"' in s or "\n" in s:
+                        s = s.replace('"', '""')
+                        cells.append(f'"{s}"')
+                    else:
+                        cells.append(s)
+            lines.append(sep.join(cells))
+        text = "\n".join(lines)
+        if len(rows) > 200:
+            text += f"\n\n... 共 {len(rows)} 条,预览前 200 条"
+        self.preview.setPlainText(text)
+
+    def _copy(self, text):
+        from PySide6.QtGui import QGuiApplication
+        QGuiApplication.clipboard().setText(text)
+        show_toast("已复制到剪贴板", "success")
+
+    def _export(self):
+        rows, kind = self._get_rows()
+        if not rows:
+            QMessageBox.information(self, "提示", "没有可导出的数据")
+            return
+        fmt = self.format_combo.currentData()
+        sep = "\t" if fmt == "tsv" else ","
+        ext = "tsv" if fmt == "tsv" else "csv"
+        from PySide6.QtWidgets import QFileDialog
+        default_name = f"{self._match['a_table']}_{kind}.{ext}"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "导出文件", default_name,
+            f"{ext.upper()} files (*.{ext});;All files (*)"
+        )
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8", newline="") as f:
+                if self._common_cols:
+                    f.write(sep.join(self._common_cols) + "\n")
+                for r in rows:
+                    cells = []
+                    for c in self._common_cols:
+                        v = r.get(c, "")
+                        if v is None:
+                            cells.append("")
+                        else:
+                            s = str(v)
+                            if sep in s or '"' in s or "\n" in s:
+                                s = s.replace('"', '""')
+                                cells.append(f'"{s}"')
+                            else:
+                                cells.append(s)
+                    f.write(sep.join(cells) + "\n")
+            show_toast(f"已导出 {len(rows)} 条到 {path}", "success")
+        except Exception as e:
+            QMessageBox.warning(self, "错误", str(e))
+
+
+class _CellBgDelegate(QStyledItemDelegate):
+    """强制给 item 设背景色 — 绕开 QSS widget background 对 setBackground 的覆盖。
+
+    bg_getter(row, col) -> QColor or None
+        返回该 cell 的背景色;None 表示不设(用默认)
+    """
+    def __init__(self, bg_getter, parent=None):
+        super().__init__(parent)
+        self._bg_getter = bg_getter
+
+    def initStyleOption(self, option, index):
+        super().initStyleOption(option, index)
+        if self._bg_getter is None:
+            return
+        try:
+            bg = self._bg_getter(index.row(), index.column())
+        except Exception:
+            return
+        if bg is not None:
+            option.backgroundBrush = QBrush(bg)
+            # 同时设 palette 的 Base,让 text 编辑/绘制也走这个色
+            option.palette.setColor(QPalette.ColorRole.Base, bg)
+            option.palette.setColor(QPalette.ColorRole.AlternateBase, bg)
+
+
 class ResultDialog(QDialog):
     """对比结果弹窗 — 5 个 tab 全部用 QTableWidget 真实 cell + 各自文件原始行号"""
 
@@ -841,7 +1182,17 @@ class ResultDialog(QDialog):
         summary_lbl.setStyleSheet("font-size: 14px; font-weight: 700;")
         st.addWidget(summary_lbl)
         st.addStretch()
-        close_btn = QPushButton(tr("action.close"))
+        # 导出按钮
+        self.export_sql_btn = QPushButton("导出 SQL")
+        self.export_sql_btn.setObjectName("Ghost")
+        self.export_sql_btn.clicked.connect(self._on_export_sql)
+        st.addWidget(self.export_sql_btn)
+        self.export_csv_btn = QPushButton("导出 CSV")
+        self.export_csv_btn.setObjectName("Ghost")
+        self.export_csv_btn.clicked.connect(self._on_export_csv)
+        st.addWidget(self.export_csv_btn)
+        # 关闭
+        close_btn = QPushButton("关闭")
         close_btn.setObjectName("Ghost")
         close_btn.clicked.connect(self.accept)
         st.addWidget(close_btn)
@@ -864,16 +1215,16 @@ class ResultDialog(QDialog):
         self.detail_tabs = QTabWidget()
         self.detail_tabs.setDocumentMode(True)
         # 6 个 tab:文件内容 A / 文件内容 B / 缺 A / 缺 B / 未变 / 差分摘要 — 全部 QTableWidget
-        self.content_view_a = self._make_table()
-        self.content_view_b = self._make_table()
-        self.missing_a_view = self._make_table()
-        self.missing_b_view = self._make_table()
-        self.unchanged_view = self._make_table()
-        self.diff_view = self._make_table()
+        self.content_view_a = self._make_table(side="A")
+        self.content_view_b = self._make_table(side="B")
+        self.missing_a_view = self._make_table(side="added")
+        self.missing_b_view = self._make_table(side="removed")
+        self.unchanged_view = self._make_table(side="unchanged")
+        self.diff_view = self._make_table(side="diff")
         self.detail_tabs.addTab(self.content_view_a, tr("diff.result.content_a"))
         self.detail_tabs.addTab(self.content_view_b, tr("diff.result.content_b"))
-        self.detail_tabs.addTab(self.missing_a_view, tr("diff.result.missing_a"))
-        self.detail_tabs.addTab(self.missing_b_view, tr("diff.result.missing_b"))
+        self.detail_tabs.addTab(self.missing_a_view, tr("diff.result.added"))
+        self.detail_tabs.addTab(self.missing_b_view, tr("diff.result.removed"))
         self.detail_tabs.addTab(self.unchanged_view, tr("diff.result.unchanged"))
         self.detail_tabs.addTab(self.diff_view, tr("diff.result.diff_text"))
         body.addWidget(self.detail_tabs)
@@ -899,26 +1250,71 @@ class ResultDialog(QDialog):
         if self.pair_list.count() > 0:
             self.pair_list.setCurrentRow(0)
 
-    def _make_table(self) -> QTableWidget:
+    def _make_table(self, side: str = "", bg_getter=None) -> QTableWidget:
         t = QTableWidget()
         # 每列按内容自适应(列名+值能完整看到),开横向滚动条
         t.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         t.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         t.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        # 去掉 Qt 自带的行号列
-        t.verticalHeader().setVisible(False)
+        # 行号:用 Qt 自带的 verticalHeader(单一列,不重复)
+        t.verticalHeader().setVisible(True)
         t.verticalHeader().setDefaultSectionSize(22)
         t.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         t.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         t.setWordWrap(False)  # 不要自动换行,让横向滚动
+        # 关键:用 _CellBgDelegate 强制画背景,绕开 QSS / setBackground 覆盖
+        if bg_getter is not None:
+            t.setItemDelegate(_CellBgDelegate(bg_getter, parent=t))
+        t.setProperty("diffBg", side or "")
+        sel_bg = "#1d4ed8"
+        sel_fg = "#ffffff"
         t.setStyleSheet(
-            "QTableWidget { background: #0b1220; color: #e2e8f0;"
-            "  border: 1px solid #334155; gridline-color: #1e293b; font-family: Consolas; font-size: 11px; }"
+            "QTableWidget { background: transparent; color: #e2e8f0;"
+            "  border: 1px solid #334155; gridline-color: #1e293b;"
+            "  font-family: Consolas; font-size: 11px;"
+            f"  selection-background-color: {sel_bg}; selection-color: {sel_fg}; }}"
+            f"QTableWidget::item {{ padding: 4px 8px; }}"
+            f"QTableWidget::item:selected {{ background-color: {sel_bg}; color: {sel_fg}; }}"
             "QHeaderView::section { background: #1e293b; color: #cbd5e1;"
-            "  padding: 8px 12px; font-weight: 600; }"
-            "QTableWidget::item { padding: 4px 8px; }"
+            "  padding: 8px 12px; font-weight: 600; border: 1px solid #0f172a; }"
+            "QTableCornerButton::section { background: #1e293b; border: 1px solid #0f172a; }"
         )
         return t
+
+    def _current_match_data(self):
+        """返回当前选中匹配的 (a_table, a_path, b_path, a_rows, b_rows, only_left, only_right, common_cols)"""
+        items = self.pair_list.selectedItems()
+        if not items:
+            return None
+        key = items[0].data(Qt.ItemDataRole.UserRole)
+        r = self._results_by_key.get(key)
+        if not r:
+            return None
+        m = r["match"]
+        common_cols = r.get("common_cols", [])
+        left_rows = r.get("left_rows", [])
+        right_rows = r.get("right_rows", [])
+        only_left = r["result"]["only_left"]
+        only_right = r["result"]["only_right"]
+        return m, left_rows, right_rows, only_left, only_right, common_cols
+
+    def _on_export_sql(self) -> None:
+        d = self._current_match_data()
+        if not d:
+            QMessageBox.information(self, "提示", "请先在左侧选一个匹配对")
+            return
+        m, left_rows, right_rows, only_left, only_right, common_cols = d
+        dlg = ExportSqlDialog(m, common_cols, only_left, only_right, parent=self)
+        dlg.show()
+
+    def _on_export_csv(self) -> None:
+        d = self._current_match_data()
+        if not d:
+            QMessageBox.information(self, "提示", "请先在左侧选一个匹配对")
+            return
+        m, left_rows, right_rows, only_left, only_right, common_cols = d
+        dlg = ExportCsvDialog(m, common_cols, only_left, only_right, parent=self)
+        dlg.show()
 
     def _on_pair_select(self) -> None:
         items = self.pair_list.selectedItems()
@@ -953,34 +1349,80 @@ class ResultDialog(QDialog):
         b_label = m.get("b_source_label", m["b_table"])
         self.detail_tabs.setTabText(0, f"A · {m['a_table']}  ({a_label})")
         self.detail_tabs.setTabText(1, f"B · {m['b_table']}  ({b_label})")
-        self.detail_tabs.setTabText(2, f"{tr('diff.result.missing_a')} ({n_del})")
-        self.detail_tabs.setTabText(3, f"{tr('diff.result.missing_b')} ({n_add})")
+        # 语义:A 是新数据(对比数据),B 是旧数据(原数据)
+        # - A 有 B 无 = 多(新增)
+        # - B 有 A 无 = 缺(删除)
+        self.detail_tabs.setTabText(2, f"{tr('diff.result.added')} ({n_add})")
+        self.detail_tabs.setTabText(3, f"{tr('diff.result.removed')} ({n_del})")
         self.detail_tabs.setTabText(4, f"{tr('diff.result.unchanged')} ({n_unch})")
         self.detail_tabs.setTabText(5, tr("diff.result.diff_text"))
 
         # 文件内容 — A 段 / B 段分开两个 tab
-        self._render_single_file(self.content_view_a, left_rows, common_cols, side="A")
-        self._render_single_file(self.content_view_b, right_rows, common_cols, side="B")
-        # 缺 A
+        # 关键:把 only_left / only_right 的 keys 传过去,让 A/B tab 里只在差异行高亮
+        only_left_keys = set(tuple(d.get("key", ())) for d in res["only_left"])
+        only_right_keys = set(tuple(d.get("key", ())) for d in res["only_right"])
+
+        # === 强制背景色 delegate(绕开 QSS / setBackground 覆盖问题)===
+        # A·supplier tab:差异行(only_left)用深绿,普通行用浅灰
+        a_normal = QColor("#1e293b")
+        a_diff = QColor("#0d4a2e")
+        def a_bg_getter(row, col):
+            if 0 <= row < len(left_rows):
+                key = self._row_key(left_rows[row], common_cols)
+                if key in only_left_keys:
+                    return a_diff
+            return a_normal
+        self.content_view_a.setItemDelegate(_CellBgDelegate(a_bg_getter, parent=self.content_view_a))
+
+        # B·supplier tab:差异行(only_right)用深红,普通行用浅灰
+        b_normal = QColor("#1e293b")
+        b_diff = QColor("#4a1a1a")
+        def b_bg_getter(row, col):
+            if 0 <= row < len(right_rows):
+                key = self._row_key(right_rows[row], common_cols)
+                if key in only_right_keys:
+                    return b_diff
+            return b_normal
+        self.content_view_b.setItemDelegate(_CellBgDelegate(b_bg_getter, parent=self.content_view_b))
+
+        # 多 tab(added):全部 cell 深绿
+        added_bg = QColor("#0d4a2e")
+        self.missing_a_view.setItemDelegate(_CellBgDelegate(lambda r, c: added_bg, parent=self.missing_a_view))
+        # 缺 tab(removed):全部 cell 深红
+        removed_bg = QColor("#4a1a1a")
+        self.missing_b_view.setItemDelegate(_CellBgDelegate(lambda r, c: removed_bg, parent=self.missing_b_view))
+        # 未变 tab:全部 cell 浅灰
+        unchanged_bg = QColor("#334155")
+        self.unchanged_view.setItemDelegate(_CellBgDelegate(lambda r, c: unchanged_bg, parent=self.unchanged_view))
+        # 差分摘要 tab:全部 cell 深灰
+        diff_bg = QColor("#1e293b")
+        self.diff_view.setItemDelegate(_CellBgDelegate(lambda r, c: diff_bg, parent=self.diff_view))
+
+        self._render_single_file(self.content_view_a, left_rows, common_cols,
+                                 side="A", only_keys=only_left_keys)
+        self._render_single_file(self.content_view_b, right_rows, common_cols,
+                                 side="B", only_keys=only_right_keys)
+        # 多(A 有 B 无 = 新增)→ missing_a_view (A 数据)— 浅绿背景
         self._render_diff_table(
             self.missing_a_view,
             [(i + 1, lr) for i, lr in enumerate(left_rows)],
             res["only_left"],
             common_cols,
+            bg_hex="#0d4a2e", fg_hex="#86efac",  # 多(新增)= 绿
         )
-        # 多 B
+        # 缺(B 有 A 无 = 删除)→ missing_b_view (B 数据)— 浅红背景
         self._render_diff_table(
             self.missing_b_view,
             [(i + 1, rr) for i, rr in enumerate(right_rows)],
             res["only_right"],
             common_cols,
+            bg_hex="#4a1a1a", fg_hex="#fca5a5",  # 缺(删除)= 红
         )
-        # 未变
-        self._render_summary_table(self.unchanged_view, [
-            (tr("diff.result.unchanged"), n_unch),
-            (tr("diff.result.missing_a"), n_del),
-            (tr("diff.result.missing_b"), n_add),
-        ])
+        # 未变:用 common_keys 找 PK 匹配且内容相同的行,显示在 unchanged_view
+        self._render_unchanged_table(
+            self.unchanged_view,
+            left_rows, right_rows, common_cols,
+        )
         # 差分摘要
         self._render_summary_table(self.diff_view, [
             ("A 表", m["a_table"]),
@@ -996,8 +1438,14 @@ class ResultDialog(QDialog):
 
     def _render_diff_table(self, table: QTableWidget,
                            all_rows_with_idx, diff_list,
-                           common_cols: list[str]) -> None:
-        """把 diff_list 对应到 all_rows,真实 cell 显示。无行号列。"""
+                           common_cols: list[str],
+                           bg_hex: str = "#3b1f1f", fg_hex: str = "#fca5a5") -> None:
+        """把 diff_list 对应到 all_rows,真实 cell 显示。
+
+        配色:浅色背景 + 对比度足够的文字色(不冲突)。
+        - 多(新增): 浅绿 bg #14302a + 亮绿 fg #6ee7b7
+        - 缺(删除): 浅红 bg #3b1f1f + 亮红 fg #fca5a5
+        """
         from PySide6.QtGui import QColor
         diff_keys = set(tuple(d.get("key", ())) for d in diff_list)
         rows_to_show = []
@@ -1006,45 +1454,108 @@ class ResultDialog(QDialog):
             if key in diff_keys:
                 rows_to_show.append((original_idx, row))
         rows_to_show = rows_to_show[:1000]
-        # 没有行号列:列 = [col1, col2, ...]
         table.clear()
         table.setColumnCount(len(common_cols))
         table.setHorizontalHeaderLabels(list(common_cols))
         table.setRowCount(len(rows_to_show))
-        red = QColor("#ef4444")
+        bg = QColor(bg_hex)
+        fg = QColor(fg_hex)
         for r_i, (orig_idx, row) in enumerate(rows_to_show):
             for c_i, c in enumerate(common_cols):
                 val = row.get(c)
                 item = QTableWidgetItem("" if val is None else str(val))
-                item.setForeground(red)
+                item.setBackground(bg)
+                item.setForeground(fg)
                 table.setItem(r_i, c_i, item)
-        # _make_table 已设 ResizeToContents
 
     def _render_single_file(self, table: QTableWidget, rows: list[dict],
-                              common_cols: list[str], side: str) -> None:
-        """单文件视图:各列直接显示,无行号列。"""
+                              common_cols: list[str], side: str,
+                              only_keys: set = None) -> None:
+        """单文件视图:在 A/B tab 显示完整数据,**只在差异行(only_left/only_right)高亮**。
+
+        - 普通行(在对方也存在的):浅底色 #1e293b(几乎看不出,仅作行间区分)
+        - 差异行(在对方不存在的):强烈底色 — A 端差异用深绿(新增),B 端差异用深红(缺少)
+        - 行号列(verticalHeader)同步染色,让用户一眼定位
+        """
         from PySide6.QtGui import QColor
         all_cols = common_cols
         if not all_cols and rows:
             all_cols = list(rows[0].keys())
         if not all_cols:
             return
-        # 列: col1 | col2 | ...(无行号列)
         table.clear()
         table.setColumnCount(len(all_cols))
         table.setHorizontalHeaderLabels(list(all_cols))
         table.setRowCount(len(rows))
+        # 配色
+        normal_bg = QColor("#1e293b")  # 普通行 — 浅蓝灰(几乎看不出)
+        normal_fg = QColor("#cbd5e1")
         if side == "A":
-            color = QColor("#22c55e")
+            # A 端差异(only_left) = 新增 = 深绿
+            diff_bg = QColor("#0d4a2e")
+            diff_fg = QColor("#86efac")
         else:
-            color = QColor("#ef4444")
+            # B 端差异(only_right) = 缺少 = 深红
+            diff_bg = QColor("#4a1a1a")
+            diff_fg = QColor("#fca5a5")
+        diff_keys = only_keys or set()
+        # 同步行号(verticalHeader)颜色
+        vh = table.verticalHeader()
+        vh_default = QColor("#1e293b")
         for r_i, row_data in enumerate(rows):
+            row_key = self._row_key(row_data, all_cols)
+            is_diff = row_key in diff_keys
+            if is_diff:
+                bg, fg = diff_bg, diff_fg
+                vh_color = diff_bg
+            else:
+                bg, fg = normal_bg, normal_fg
+                vh_color = vh_default
+            # 行号列
+            vh_item = QTableWidgetItem(str(r_i + 1))
+            vh_item.setBackground(vh_color)
+            vh_item.setForeground(normal_fg)
+            table.setVerticalHeaderItem(r_i, vh_item)
             for c_i, c in enumerate(all_cols):
                 val = row_data.get(c)
                 item = QTableWidgetItem("" if val is None else str(val))
-                item.setForeground(color)
+                item.setBackground(bg)
+                item.setForeground(fg)
+                # 差异行加粗 + 顶部边框
+                if is_diff:
+                    font = item.font()
+                    font.setBold(True)
+                    item.setFont(font)
                 table.setItem(r_i, c_i, item)
-        # _make_table 已设 ResizeToContents
+
+    def _render_unchanged_table(self, table: QTableWidget,
+                                left_rows, right_rows, common_cols) -> None:
+        """未变 tab — A 和 B 都有、内容相同的行(整行 set-based 匹配)。
+        浅灰背景 + 默认浅色字体,跟多/缺区分开。
+        """
+        from PySide6.QtGui import QColor
+        if not common_cols:
+            return
+        left_dict = {}
+        for lr in left_rows:
+            left_dict[self._row_key(lr, common_cols)] = lr
+        right_keys = set(self._row_key(rr, common_cols) for rr in right_rows)
+        # 公共 key(在两边都存在)
+        common_keys = [k for k in left_dict if k in right_keys][:1000]
+        table.clear()
+        table.setColumnCount(len(common_cols))
+        table.setHorizontalHeaderLabels(list(common_cols))
+        table.setRowCount(len(common_keys))
+        bg = QColor("#334155")  # 浅灰蓝(调亮)
+        fg = QColor("#e2e8f0")
+        for r_i, k in enumerate(common_keys):
+            row = left_dict[k]
+            for c_i, c in enumerate(common_cols):
+                val = row.get(c)
+                item = QTableWidgetItem("" if val is None else str(val))
+                item.setBackground(bg)
+                item.setForeground(fg)
+                table.setItem(r_i, c_i, item)
 
     def _render_summary_table(self, table: QTableWidget, rows) -> None:
         """通用:用 QTableWidget 显示 [指标, 值] 二列表。"""
