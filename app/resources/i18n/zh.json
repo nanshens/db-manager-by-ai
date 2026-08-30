@@ -373,6 +373,8 @@
   "diff.run.err.no_cols": "选了「指定列」但没选具体列",
   "diff.result.pairs": "匹配对",
   "diff.result.content": "文件内容",
+  "diff.result.content_a": "文件内容(A)",
+  "diff.result.content_b": "文件内容(B)",
   "diff.result.modified": "修改",
   "diff.result.missing_a": "缺(A 有 B 无)",
   "diff.result.missing_b": "多(B 有 A 无)",

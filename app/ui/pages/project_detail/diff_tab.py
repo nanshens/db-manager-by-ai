@@ -863,13 +863,15 @@ class ResultDialog(QDialog):
 
         self.detail_tabs = QTabWidget()
         self.detail_tabs.setDocumentMode(True)
-        # 5 个 tab 全部 QTableWidget
+        # 6 个 tab:文件内容 A / 文件内容 B / 缺 A / 缺 B / 未变 / 差分摘要 — 全部 QTableWidget
+        self.content_view_a = self._make_table()
+        self.content_view_b = self._make_table()
         self.missing_a_view = self._make_table()
         self.missing_b_view = self._make_table()
-        self.content_view = self._make_table()
         self.unchanged_view = self._make_table()
         self.diff_view = self._make_table()
-        self.detail_tabs.addTab(self.content_view, tr("diff.result.content"))
+        self.detail_tabs.addTab(self.content_view_a, tr("diff.result.content_a"))
+        self.detail_tabs.addTab(self.content_view_b, tr("diff.result.content_b"))
         self.detail_tabs.addTab(self.missing_a_view, tr("diff.result.missing_a"))
         self.detail_tabs.addTab(self.missing_b_view, tr("diff.result.missing_b"))
         self.detail_tabs.addTab(self.unchanged_view, tr("diff.result.unchanged"))
@@ -899,10 +901,16 @@ class ResultDialog(QDialog):
 
     def _make_table(self) -> QTableWidget:
         t = QTableWidget()
-        t.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        # 每列按内容自适应(列名+值能完整看到),开横向滚动条
+        t.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        t.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        t.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        # 去掉 Qt 自带的行号列
         t.verticalHeader().setVisible(False)
+        t.verticalHeader().setDefaultSectionSize(22)
         t.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         t.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        t.setWordWrap(False)  # 不要自动换行,让横向滚动
         t.setStyleSheet(
             "QTableWidget { background: #0b1220; color: #e2e8f0;"
             "  border: 1px solid #334155; gridline-color: #1e293b; font-family: Consolas; font-size: 11px; }"
@@ -941,12 +949,18 @@ class ResultDialog(QDialog):
         n_del = len(res["only_left"])
         n_unch = res["unchanged_count"]
         # tab 标题带数字
-        self.detail_tabs.setTabText(0, tr("diff.result.content"))
-        self.detail_tabs.setTabText(1, f"{tr('diff.result.missing_a')} ({n_del})")
-        self.detail_tabs.setTabText(2, f"{tr('diff.result.missing_b')} ({n_add})")
-        self.detail_tabs.setTabText(3, f"{tr('diff.result.unchanged')} ({n_unch})")
-        self.detail_tabs.setTabText(4, tr("diff.result.diff_text"))
+        a_label = m.get("a_source_label", m["a_table"])
+        b_label = m.get("b_source_label", m["b_table"])
+        self.detail_tabs.setTabText(0, f"A · {m['a_table']}  ({a_label})")
+        self.detail_tabs.setTabText(1, f"B · {m['b_table']}  ({b_label})")
+        self.detail_tabs.setTabText(2, f"{tr('diff.result.missing_a')} ({n_del})")
+        self.detail_tabs.setTabText(3, f"{tr('diff.result.missing_b')} ({n_add})")
+        self.detail_tabs.setTabText(4, f"{tr('diff.result.unchanged')} ({n_unch})")
+        self.detail_tabs.setTabText(5, tr("diff.result.diff_text"))
 
+        # 文件内容 — A 段 / B 段分开两个 tab
+        self._render_single_file(self.content_view_a, left_rows, common_cols, side="A")
+        self._render_single_file(self.content_view_b, right_rows, common_cols, side="B")
         # 缺 A
         self._render_diff_table(
             self.missing_a_view,
@@ -961,8 +975,6 @@ class ResultDialog(QDialog):
             res["only_right"],
             common_cols,
         )
-        # 文件内容
-        self._render_content_table(left_rows, right_rows, common_cols)
         # 未变
         self._render_summary_table(self.unchanged_view, [
             (tr("diff.result.unchanged"), n_unch),
@@ -985,12 +997,8 @@ class ResultDialog(QDialog):
     def _render_diff_table(self, table: QTableWidget,
                            all_rows_with_idx, diff_list,
                            common_cols: list[str]) -> None:
-        """把 diff_list 对应到 all_rows 拿到文件原始行号,真实 cell 显示。"""
-        table.clear()
-        headers = [tr("diff.result.col.row_id")] + list(common_cols)
-        table.setColumnCount(len(headers))
-        table.setHorizontalHeaderLabels(headers)
-        # 用 content_key 找匹配的行
+        """把 diff_list 对应到 all_rows,真实 cell 显示。无行号列。"""
+        from PySide6.QtGui import QColor
         diff_keys = set(tuple(d.get("key", ())) for d in diff_list)
         rows_to_show = []
         for original_idx, row in all_rows_with_idx:
@@ -998,90 +1006,45 @@ class ResultDialog(QDialog):
             if key in diff_keys:
                 rows_to_show.append((original_idx, row))
         rows_to_show = rows_to_show[:1000]
+        # 没有行号列:列 = [col1, col2, ...]
+        table.clear()
+        table.setColumnCount(len(common_cols))
+        table.setHorizontalHeaderLabels(list(common_cols))
         table.setRowCount(len(rows_to_show))
-        from PySide6.QtGui import QColor
         red = QColor("#ef4444")
-        muted = QColor("#64748b")
         for r_i, (orig_idx, row) in enumerate(rows_to_show):
-            rowid_item = QTableWidgetItem(str(orig_idx))
-            rowid_item.setForeground(muted)
-            table.setItem(r_i, 0, rowid_item)
             for c_i, c in enumerate(common_cols):
                 val = row.get(c)
                 item = QTableWidgetItem("" if val is None else str(val))
                 item.setForeground(red)
-                table.setItem(r_i, 1 + c_i, item)
-        if table.columnCount() > 0:
-            hdr = table.horizontalHeader()
-            hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-            for c in range(1, table.columnCount()):
-                hdr.setSectionResizeMode(c, QHeaderView.ResizeMode.Stretch)
+                table.setItem(r_i, c_i, item)
+        # _make_table 已设 ResizeToContents
 
-    def _render_content_table(self, left_rows, right_rows, common_cols) -> None:
-        """文件内容 tab — 上下两段(A 段 + B 段)。"""
-        self.content_view.clear()
+    def _render_single_file(self, table: QTableWidget, rows: list[dict],
+                              common_cols: list[str], side: str) -> None:
+        """单文件视图:各列直接显示,无行号列。"""
+        from PySide6.QtGui import QColor
         all_cols = common_cols
-        if not all_cols:
-            if left_rows:
-                all_cols = list(left_rows[0].keys())
-            elif right_rows:
-                all_cols = list(right_rows[0].keys())
+        if not all_cols and rows:
+            all_cols = list(rows[0].keys())
         if not all_cols:
             return
-        # 列: 行号 | A·col1 | A·col2 | ... | 行号 | B·col1 | B·col2 | ...
-        a_col_count = 1 + len(all_cols)
-        b_col_count = 1 + len(all_cols)
-        total_cols = a_col_count + b_col_count
-        total_rows = len(left_rows) + len(right_rows) + 1
-        self.content_view.setRowCount(total_rows)
-        self.content_view.setColumnCount(total_cols)
-        headers = (
-            [tr("diff.result.col.row_id")] + [f"A · {c}" for c in all_cols] +
-            [tr("diff.result.col.row_id")] + [f"B · {c}" for c in all_cols]
-        )
-        self.content_view.setHorizontalHeaderLabels(headers)
-        from PySide6.QtGui import QColor
-        red = QColor("#ef4444")
-        green = QColor("#22c55e")
-        muted = QColor("#64748b")
-        row = 0
-        # A 段
-        for i, lr in enumerate(left_rows, 1):
-            rowid = QTableWidgetItem(str(i))
-            rowid.setForeground(muted)
-            self.content_view.setItem(row, 0, rowid)
+        # 列: col1 | col2 | ...(无行号列)
+        table.clear()
+        table.setColumnCount(len(all_cols))
+        table.setHorizontalHeaderLabels(list(all_cols))
+        table.setRowCount(len(rows))
+        if side == "A":
+            color = QColor("#22c55e")
+        else:
+            color = QColor("#ef4444")
+        for r_i, row_data in enumerate(rows):
             for c_i, c in enumerate(all_cols):
-                val = lr.get(c)
+                val = row_data.get(c)
                 item = QTableWidgetItem("" if val is None else str(val))
-                item.setForeground(green)
-                self.content_view.setItem(row, 1 + c_i, item)
-            row += 1
-        # 分隔
-        sep = QTableWidgetItem("--- B 数据 ---")
-        sep.setForeground(muted)
-        self.content_view.setItem(row, 0, sep)
-        for c_i in range(1, total_cols):
-            self.content_view.setItem(row, c_i, QTableWidgetItem(""))
-        row += 1
-        # B 段
-        for i, rr in enumerate(right_rows, 1):
-            rowid = QTableWidgetItem(str(i))
-            rowid.setForeground(muted)
-            self.content_view.setItem(row, a_col_count, rowid)
-            for c_i, c in enumerate(all_cols):
-                val = rr.get(c)
-                item = QTableWidgetItem("" if val is None else str(val))
-                item.setForeground(red)
-                self.content_view.setItem(row, a_col_count + 1 + c_i, item)
-            row += 1
-        # 列宽
-        hdr = self.content_view.horizontalHeader()
-        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        hdr.setSectionResizeMode(a_col_count, QHeaderView.ResizeMode.ResizeToContents)
-        for c in range(1, a_col_count):
-            hdr.setSectionResizeMode(c, QHeaderView.ResizeMode.Stretch)
-        for c in range(a_col_count + 1, total_cols):
-            hdr.setSectionResizeMode(c, QHeaderView.ResizeMode.Stretch)
+                item.setForeground(color)
+                table.setItem(r_i, c_i, item)
+        # _make_table 已设 ResizeToContents
 
     def _render_summary_table(self, table: QTableWidget, rows) -> None:
         """通用:用 QTableWidget 显示 [指标, 值] 二列表。"""

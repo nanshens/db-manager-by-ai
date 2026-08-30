@@ -373,6 +373,8 @@
   "diff.error.no_cols": "Selected-columns mode requires picking at least one column",
   "diff.result.pairs": "Pairs",
   "diff.result.content": "File content",
+  "diff.result.content_a": "File content (A)",
+  "diff.result.content_b": "File content (B)",
   "diff.result.modified": "Modified",
   "diff.result.missing_a": "Missing (A only)",
   "diff.result.missing_b": "Extra (B only)",

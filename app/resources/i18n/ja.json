@@ -373,6 +373,8 @@
   "diff.error.no_cols": "「指定カラム一致」モードでは、先に「列選択…」で 1 列以上選んでください",
   "diff.result.pairs": "ペア",
   "diff.result.content": "ファイル内容",
+  "diff.result.content_a": "ファイル内容 (A)",
+  "diff.result.content_b": "ファイル内容 (B)",
   "diff.result.modified": "変更",
   "diff.result.missing_a": "欠落 (A のみ)",
   "diff.result.missing_b": "余分 (B のみ)",
