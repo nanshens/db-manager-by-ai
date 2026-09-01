@@ -18,9 +18,14 @@ class ExcelTemplateService:
     def get_by_name(self, name: str, project_id: Optional[int]) -> Optional[ExcelTemplate]:
         return self.repo.get_by_name(name, project_id)
 
-    def create(self, project_id: Optional[int], template_name: str, config_sheet_name: str,
-               table_name_col: str, sheet_name_col: str,
+    def create(self, project_id: Optional[int], template_name: str,
+               config_sheet_name: str = "",
+               table_name_col: str = "",
+               sheet_name_col: str = "",
                header_row: int = 1, data_start_row: int = 2,
+               column_start: int = 1,
+               parse_mode: str = "mapping",
+               name_mapping: str = "{}",
                description: str = "") -> ExcelTemplate:
         template_name = template_name.strip()
         config_sheet_name = config_sheet_name.strip()
@@ -28,14 +33,25 @@ class ExcelTemplateService:
         sheet_name_col = sheet_name_col.strip()
         if not template_name:
             raise ValueError("模板名不能为空")
-        if not config_sheet_name:
-            raise ValueError("配置 sheet 名不能为空")
-        if not table_name_col:
-            raise ValueError("表名列不能为空")
-        if not sheet_name_col:
-            raise ValueError("Sheet 名列不能为空")
-        if header_row < 1 or data_start_row < 1:
-            raise ValueError("行号必须 >= 1")
+        # mode 1 才需要下面 3 个字段
+        if parse_mode == "mapping":
+            if not config_sheet_name:
+                raise ValueError("模式 1 需要配置 sheet 名")
+            if not table_name_col:
+                raise ValueError("模式 1 需要英文表名列")
+            if not sheet_name_col:
+                raise ValueError("模式 1 需要 sheet 名称列")
+        # mode 3 才需要 name_mapping 不为空
+        if parse_mode == "chinese_name":
+            import json as _json
+            try:
+                m = _json.loads(name_mapping or "{}")
+            except Exception:
+                m = {}
+            if not m:
+                raise ValueError("模式 3 至少要有一条 sheet→英文表名映射")
+        if header_row < 1 or data_start_row < 1 or column_start < 1:
+            raise ValueError("行号/列号必须 >= 1")
         if data_start_row < header_row:
             raise ValueError("数据起始行必须 >= header 行")
 
@@ -44,6 +60,8 @@ class ExcelTemplateService:
             config_sheet_name=config_sheet_name,
             table_name_col=table_name_col, sheet_name_col=sheet_name_col,
             header_row=header_row, data_start_row=data_start_row,
+            column_start=column_start,
+            parse_mode=parse_mode, name_mapping=name_mapping,
             description=description.strip(),
         )
         tid = self.repo.create(t)

@@ -195,9 +195,10 @@ class SourcePanel(QFrame):
     # ----- 添加源 -----
 
     def _add_file(self) -> None:
+        # 注意:Excel 走专门的"选 Excel"按钮 + 模板,这里只允许 csv/tsv
         paths, _ = QFileDialog.getOpenFileNames(
             self, tr("diff.browse_title"),
-            "", "Data files (*.csv *.tsv *.xlsx *.xls);;All files (*)",
+            "", "Data files (*.csv *.tsv);;All files (*)",
         )
         for p in paths:
             if detect_format(p) == "unknown":
@@ -233,36 +234,87 @@ class SourcePanel(QFrame):
         self._add_source(src)
 
     def _add_excel(self) -> None:
-        # 1. 选模板
-        templates = reg().excel_template_service.list(project_id=self._get_project_id())
-        if not templates:
-            QMessageBox.information(self, tr("common.info"), tr("diff.src.no_template"))
-            return
-        names = [t.template_name for t in templates]
-        name, ok = QInputDialog.getItem(self, tr("diff.src.choose_template"), "", names, 0, False)
-        if not ok:
-            return
-        tpl = next(t for t in templates if t.template_name == name)
-        # 2. 选 Excel 文件
+        # 新流程:
+        # 1. 选 xlsx 文件
+        # 2. 弹"选模板方式" — 选已有 / 新建(列表里有之前保存的模板)
+        # 3. 选已有 → 跳到 ExcelParseDialog 解析
+        #    选新建 → 弹 ExcelTemplateDialog 配置 + 保存 → ExcelParseDialog 解析
+        # 4. 加到 source
+        from app.ui.dialogs import ExcelTemplateDialog, ExcelParseDialog
+
+        # 1. 选 xlsx
         path, _ = QFileDialog.getOpenFileName(
             self, tr("diff.src.choose_excel"),
             "", "Excel files (*.xlsx *.xls);;All files (*)",
         )
         if not path:
             return
-        # 3. 解析
-        results, errors = parse_excel(path, tpl)
-        if errors:
-            show_toast("\n".join(errors[:3]), "warning")
+
+        # 2. 选模板方式(选已有 / 新建)
+        templates = reg().excel_template_service.list(project_id=self._get_project_id())
+        options = ["📝 新建模板(配置解析方式)"] + [f"📋 {t.template_name}" for t in templates]
+        choice, ok = QInputDialog.getItem(
+            self, "选模板", f"已选文件: {os.path.basename(path)}\n选已有模板可直接用,或新建:",
+            options, 0, False
+        )
+        if not ok:
+            return
+
+        tpl: Optional[ExcelTemplate] = None
+        if choice.startswith("📝 新建模板"):
+            # 3a. 弹 ExcelTemplateDialog — 模式 3 自动加载 sheet 名
+            pid = self._get_project_id()
+            project_tables: list[str] = []
+            if pid:
+                try:
+                    project_tables = [t.name for t in reg().table_repo.list_by_project(pid)]
+                except Exception:
+                    pass
+            tpl_dlg = ExcelTemplateDialog(
+                file_path=path,
+                projects=reg().project_service.list_all(),
+                project_id=pid,
+                project_tables=project_tables,
+                parent=self,
+            )
+            if tpl_dlg.exec() != int(QDialog.DialogCode.Accepted):
+                return
+            v = tpl_dlg.get_template()
+            try:
+                tpl = reg().excel_template_service.create(**v)  # 返回 ExcelTemplate 对象
+                if not tpl or not tpl.id:
+                    raise ValueError("保存模板失败")
+            except Exception as e:
+                QMessageBox.warning(self, tr("common.error"), f"保存模板失败: {e}")
+                return
+        else:
+            # 3b. 选已有模板
+            tpl_name = choice.replace("📋 ", "")
+            tpl = next((t for t in templates if t.template_name == tpl_name), None)
+            if not tpl:
+                QMessageBox.warning(self, tr("common.error"), f"找不到模板: {tpl_name}")
+                return
+
+        # 4. 弹 ExcelParseDialog 用 template 解析 xlsx
+        parse_dlg = ExcelParseDialog(template=tpl, parent=self)
+        parse_dlg.path_edit.setText(path)
+        parse_dlg._on_parse()
+        if parse_dlg.exec() != int(QDialog.DialogCode.Accepted):
+            return
+
+        # 5. 从 dialog 拿结果 → 转临时 CSV → 加 source
+        results = parse_dlg.get_results()
+        if not results:
+            show_toast("未解析出表", "warning")
+            return
         tables = {}
         for r in results:
             if not r.error:
-                # 把解析结果保存为临时 CSV 供 diff 用
                 tmp_csv = self._excel_to_tmp_csv(path, r)
                 if tmp_csv:
                     tables[r.table_name] = tmp_csv
         if not tables:
-            show_toast("No tables parsed successfully", "error")
+            show_toast("没有表解析成功", "error")
             return
         src = DiffSource(
             kind=SK_EXCEL, label=f"📊 {os.path.basename(path)} [{tpl.template_name}]",
@@ -270,14 +322,15 @@ class SourcePanel(QFrame):
             tables=tables,
         )
         self._add_source(src)
+        show_toast(f"已添加 Excel 源(模板: {tpl.template_name})", "success")
 
     def _excel_to_tmp_csv(self, excel_path: str, parse_result) -> Optional[str]:
         """把 ParseResult 里的表数据写到临时 CSV 供 diff 用"""
         try:
             import tempfile
-            import polars as pl
-            df = pl.read_excel(excel_path, sheet_name=parse_result.sheet_name)
-            # 切 header_row / data_start_row
+            from app.core.excel_parser import _read_sheet_fast
+            # 用 fastexcel(calamine)直接读 — 比 pl.read_excel(openpyxl) 快 8x,无 FutureWarning
+            df = _read_sheet_fast(excel_path, parse_result.sheet_name, header_row=0)
             if df.height < 1:
                 return None
             tmp = tempfile.NamedTemporaryFile(
@@ -1214,19 +1267,24 @@ class ResultDialog(QDialog):
 
         self.detail_tabs = QTabWidget()
         self.detail_tabs.setDocumentMode(True)
-        # 6 个 tab:文件内容 A / 文件内容 B / 缺 A / 缺 B / 未变 / 差分摘要 — 全部 QTableWidget
-        self.content_view_a = self._make_table(side="A")
-        self.content_view_b = self._make_table(side="B")
+        # 6 个 tab — 顺序:差分摘要, 新增, 删除, 未变, A 数据, B 数据
+        # 全部 QTableWidget + 懒加载(默认只填差分摘要,切到时再填)
+        self.diff_view = self._make_table(side="diff")
         self.missing_a_view = self._make_table(side="added")
         self.missing_b_view = self._make_table(side="removed")
         self.unchanged_view = self._make_table(side="unchanged")
-        self.diff_view = self._make_table(side="diff")
-        self.detail_tabs.addTab(self.content_view_a, tr("diff.result.content_a"))
-        self.detail_tabs.addTab(self.content_view_b, tr("diff.result.content_b"))
+        self.content_view_a = self._make_table(side="A")
+        self.content_view_b = self._make_table(side="B")
+        self.detail_tabs.addTab(self.diff_view, tr("diff.result.diff_text"))
         self.detail_tabs.addTab(self.missing_a_view, tr("diff.result.added"))
         self.detail_tabs.addTab(self.missing_b_view, tr("diff.result.removed"))
         self.detail_tabs.addTab(self.unchanged_view, tr("diff.result.unchanged"))
-        self.detail_tabs.addTab(self.diff_view, tr("diff.result.diff_text"))
+        self.detail_tabs.addTab(self.content_view_a, tr("diff.result.content_a"))
+        self.detail_tabs.addTab(self.content_view_b, tr("diff.result.content_b"))
+        # 懒加载:已填过的 tab 标记,避免重复填
+        self._loaded_tabs: set[int] = set()
+        self._current_match: Optional[dict] = None
+        self.detail_tabs.currentChanged.connect(self._on_detail_tab_changed)
         body.addWidget(self.detail_tabs)
         body.setSizes([280, 1120])
         layout.addWidget(body, 1)
@@ -1330,6 +1388,7 @@ class ResultDialog(QDialog):
         return tuple(row.get(c) for c in common_cols)
 
     def _render_pair(self, r: dict) -> None:
+        """切换匹配对时调:设置 delegate + tab 标题 + 缓存 match,只填当前可见 tab"""
         m = r["match"]
         res = r["result"]
         common_cols = r.get("common_cols", [])
@@ -1344,26 +1403,26 @@ class ResultDialog(QDialog):
         n_add = len(res["only_right"])
         n_del = len(res["only_left"])
         n_unch = res["unchanged_count"]
-        # tab 标题带数字
+        # tab 标题带数字(按新顺序:差分摘要, 新增, 删除, 未变, A, B)
         a_label = m.get("a_source_label", m["a_table"])
         b_label = m.get("b_source_label", m["b_table"])
-        self.detail_tabs.setTabText(0, f"A · {m['a_table']}  ({a_label})")
-        self.detail_tabs.setTabText(1, f"B · {m['b_table']}  ({b_label})")
+        self.detail_tabs.setTabText(4, f"A · {m['a_table']}  ({a_label})")
+        self.detail_tabs.setTabText(5, f"B · {m['b_table']}  ({b_label})")
         # 语义:A 是新数据(对比数据),B 是旧数据(原数据)
         # - A 有 B 无 = 多(新增)
         # - B 有 A 无 = 缺(删除)
-        self.detail_tabs.setTabText(2, f"{tr('diff.result.added')} ({n_add})")
-        self.detail_tabs.setTabText(3, f"{tr('diff.result.removed')} ({n_del})")
-        self.detail_tabs.setTabText(4, f"{tr('diff.result.unchanged')} ({n_unch})")
-        self.detail_tabs.setTabText(5, tr("diff.result.diff_text"))
+        self.detail_tabs.setTabText(1, f"{tr('diff.result.added')} ({n_add})")
+        self.detail_tabs.setTabText(2, f"{tr('diff.result.removed')} ({n_del})")
+        self.detail_tabs.setTabText(3, f"{tr('diff.result.unchanged')} ({n_unch})")
+        # 0 = 差分摘要(标题固定,不带数字)
 
-        # 文件内容 — A 段 / B 段分开两个 tab
-        # 关键:把 only_left / only_right 的 keys 传过去,让 A/B tab 里只在差异行高亮
+        # 缓存当前 match(给 _fill_tab / _on_detail_tab_changed 用)
+        self._current_match = r
+
+        # === 强制背景色 delegate(轻量,只建闭包不填数据)===
         only_left_keys = set(tuple(d.get("key", ())) for d in res["only_left"])
         only_right_keys = set(tuple(d.get("key", ())) for d in res["only_right"])
 
-        # === 强制背景色 delegate(绕开 QSS / setBackground 覆盖问题)===
-        # A·supplier tab:差异行(only_left)用深绿,普通行用浅灰
         a_normal = QColor("#1e293b")
         a_diff = QColor("#0d4a2e")
         def a_bg_getter(row, col):
@@ -1374,7 +1433,6 @@ class ResultDialog(QDialog):
             return a_normal
         self.content_view_a.setItemDelegate(_CellBgDelegate(a_bg_getter, parent=self.content_view_a))
 
-        # B·supplier tab:差异行(only_right)用深红,普通行用浅灰
         b_normal = QColor("#1e293b")
         b_diff = QColor("#4a1a1a")
         def b_bg_getter(row, col):
@@ -1385,44 +1443,96 @@ class ResultDialog(QDialog):
             return b_normal
         self.content_view_b.setItemDelegate(_CellBgDelegate(b_bg_getter, parent=self.content_view_b))
 
-        # 多 tab(added):全部 cell 深绿
-        added_bg = QColor("#0d4a2e")
-        self.missing_a_view.setItemDelegate(_CellBgDelegate(lambda r, c: added_bg, parent=self.missing_a_view))
-        # 缺 tab(removed):全部 cell 深红
-        removed_bg = QColor("#4a1a1a")
-        self.missing_b_view.setItemDelegate(_CellBgDelegate(lambda r, c: removed_bg, parent=self.missing_b_view))
-        # 未变 tab:全部 cell 浅灰
-        unchanged_bg = QColor("#334155")
-        self.unchanged_view.setItemDelegate(_CellBgDelegate(lambda r, c: unchanged_bg, parent=self.unchanged_view))
-        # 差分摘要 tab:全部 cell 深灰
-        diff_bg = QColor("#1e293b")
-        self.diff_view.setItemDelegate(_CellBgDelegate(lambda r, c: diff_bg, parent=self.diff_view))
+        self.missing_a_view.setItemDelegate(_CellBgDelegate(
+            lambda r, c: QColor("#0d4a2e"), parent=self.missing_a_view))
+        self.missing_b_view.setItemDelegate(_CellBgDelegate(
+            lambda r, c: QColor("#4a1a1a"), parent=self.missing_b_view))
+        self.unchanged_view.setItemDelegate(_CellBgDelegate(
+            lambda r, c: QColor("#334155"), parent=self.unchanged_view))
+        self.diff_view.setItemDelegate(_CellBgDelegate(
+            lambda r, c: QColor("#1e293b"), parent=self.diff_view))
 
-        self._render_single_file(self.content_view_a, left_rows, common_cols,
-                                 side="A", only_keys=only_left_keys)
-        self._render_single_file(self.content_view_b, right_rows, common_cols,
-                                 side="B", only_keys=only_right_keys)
-        # 多(A 有 B 无 = 新增)→ missing_a_view (A 数据)— 浅绿背景
-        self._render_diff_table(
-            self.missing_a_view,
-            [(i + 1, lr) for i, lr in enumerate(left_rows)],
-            res["only_left"],
-            common_cols,
-            bg_hex="#0d4a2e", fg_hex="#86efac",  # 多(新增)= 绿
-        )
-        # 缺(B 有 A 无 = 删除)→ missing_b_view (B 数据)— 浅红背景
-        self._render_diff_table(
-            self.missing_b_view,
-            [(i + 1, rr) for i, rr in enumerate(right_rows)],
-            res["only_right"],
-            common_cols,
-            bg_hex="#4a1a1a", fg_hex="#fca5a5",  # 缺(删除)= 红
-        )
-        # 未变:用 common_keys 找 PK 匹配且内容相同的行,显示在 unchanged_view
-        self._render_unchanged_table(
-            self.unchanged_view,
-            left_rows, right_rows, common_cols,
-        )
+        # 懒加载:清空 _loaded_tabs,只填当前可见 tab
+        self._loaded_tabs.clear()
+        self._fill_tab(self.detail_tabs.currentIndex())
+
+    def _on_detail_tab_changed(self, idx: int) -> None:
+        """tab 切换时按需填数据(只在未填过时填)"""
+        if idx < 0 or not self._current_match:
+            return
+        self._fill_tab(idx)
+
+    def _fill_tab(self, idx: int) -> None:
+        """填指定 tab 的数据(已填过跳过)"""
+        if idx in self._loaded_tabs:
+            return
+        if not self._current_match:
+            return
+        r = self._current_match
+        res = r["result"]
+        common_cols = r.get("common_cols", [])
+        left_rows = r.get("left_rows", [])
+        right_rows = r.get("right_rows", [])
+        if not common_cols:
+            if left_rows:
+                common_cols = list(left_rows[0].keys())
+            elif right_rows:
+                common_cols = list(right_rows[0].keys())
+
+        only_left_keys = set(tuple(d.get("key", ())) for d in res["only_left"])
+        only_right_keys = set(tuple(d.get("key", ())) for d in res["only_right"])
+        m = r["match"]
+        n_add = len(res["only_right"])
+        n_del = len(res["only_left"])
+        n_unch = res["unchanged_count"]
+
+        # tab 顺序:0=差分摘要, 1=新增, 2=删除, 3=未变, 4=A, 5=B
+        if idx == 0:
+            # 差分摘要
+            self._render_summary_table(self.diff_view, [
+                ("A 表", m["a_table"]),
+                ("B 表", m["b_table"]),
+                ("A 来源", m.get("a_source_label", "")),
+                ("B 来源", m.get("b_source_label", "")),
+                ("A 总行数", str(res["total_left"])),
+                ("B 总行数", str(res["total_right"])),
+                ("缺(A 有 B 无)", str(n_del)),
+                ("多(B 有 A 无)", str(n_add)),
+                ("未变", str(n_unch)),
+            ])
+        elif idx == 1:
+            # 新增(only_left)
+            self._render_diff_table(
+                self.missing_a_view,
+                [(i + 1, lr) for i, lr in enumerate(left_rows)],
+                res["only_left"],
+                common_cols,
+                bg_hex="#0d4a2e", fg_hex="#86efac",
+            )
+        elif idx == 2:
+            # 删除(only_right)
+            self._render_diff_table(
+                self.missing_b_view,
+                [(i + 1, rr) for i, rr in enumerate(right_rows)],
+                res["only_right"],
+                common_cols,
+                bg_hex="#4a1a1a", fg_hex="#fca5a5",
+            )
+        elif idx == 3:
+            # 未变
+            self._render_unchanged_table(
+                self.unchanged_view,
+                left_rows, right_rows, common_cols,
+            )
+        elif idx == 4:
+            # A 数据
+            self._render_single_file(self.content_view_a, left_rows, common_cols,
+                                     side="A", only_keys=only_left_keys)
+        elif idx == 5:
+            # B 数据
+            self._render_single_file(self.content_view_b, right_rows, common_cols,
+                                     side="B", only_keys=only_right_keys)
+        self._loaded_tabs.add(idx)
         # 差分摘要
         self._render_summary_table(self.diff_view, [
             ("A 表", m["a_table"]),

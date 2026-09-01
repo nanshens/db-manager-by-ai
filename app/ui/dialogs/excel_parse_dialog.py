@@ -95,9 +95,16 @@ class ExcelParseDialog(QDialog):
         # Buttons
         btn_row = QHBoxLayout()
         btn_row.addStretch()
+        # "使用这些表" 按钮 — 把结果返回给调用方(数据对比等)
+        self.use_btn = QPushButton("使用这些表")
+        self.use_btn.setObjectName("Primary")
+        self.use_btn.setIcon(qta.icon("mdi6.check", color="white"))
+        self.use_btn.setEnabled(False)  # 解析成功才启用
+        self.use_btn.clicked.connect(self.accept)
+        btn_row.addWidget(self.use_btn)
         close_btn = QPushButton(tr("action.close"))
         close_btn.setObjectName("Ghost")
-        close_btn.clicked.connect(self.accept)
+        close_btn.clicked.connect(self.reject)
         btn_row.addWidget(close_btn)
         layout.addLayout(btn_row)
 
@@ -122,13 +129,18 @@ class ExcelParseDialog(QDialog):
         self._results, self._errors = parse_excel(path, self._template)
         # 填充列表
         self.table_list.clear()
+        ok_count = 0
         for r in self._results:
             status = "✓" if not r.error else "✗"
             item = QListWidgetItem(f"{status}  {r.table_name}  ({r.sheet_name}, {r.rows} 行)")
             item.setData(Qt.ItemDataRole.UserRole, r.table_name)
             self.table_list.addItem(item)
+            if not r.error:
+                ok_count += 1
         if self._results:
             self.table_list.setCurrentRow(0)
+        # 启用"使用"按钮(只有至少 1 个表成功才允许)
+        self.use_btn.setEnabled(ok_count > 0)
         if self._errors:
             QMessageBox.warning(self, tr("common.warning"),
                                 tr("dlg.excel_parse.errors") + "\n" + "\n".join(self._errors[:5]))
@@ -162,3 +174,15 @@ class ExcelParseDialog(QDialog):
         for i, row in enumerate(r.sample_rows or []):
             for j, val in enumerate(row):
                 self.preview_table.setItem(i, j, QTableWidgetItem(str(val)))
+
+    # ----- 给数据源流程用 -----
+    def get_path(self) -> str:
+        """返回当前已解析的 Excel 路径"""
+        return self.path_edit.text().strip()
+
+    def get_results(self) -> list[ParseResult]:
+        """返回当前已解析的结果(空 = 未解析或无结果)"""
+        return list(self._results)
+
+    def get_errors(self) -> list[str]:
+        return list(self._errors)

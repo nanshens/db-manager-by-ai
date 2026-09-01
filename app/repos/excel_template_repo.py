@@ -12,12 +12,18 @@ from app.repos.db import get_connection, transaction
 class ExcelTemplate:
     id: Optional[int]
     template_name: str
-    config_sheet_name: str
-    table_name_col: str
-    sheet_name_col: str
+    # mode 1 (mapping): 用下面 3 个字段
+    config_sheet_name: str = ""
+    table_name_col: str = ""
+    sheet_name_col: str = ""
     project_id: Optional[int] = None  # NULL = 全局
     header_row: int = 1
     data_start_row: int = 2
+    column_start: int = 1
+    # 解析模式: mapping / sheet_name / chinese_name
+    parse_mode: str = "mapping"
+    # JSON: {中文sheet名: 英文表名} — mode 3 用
+    name_mapping: str = "{}"
     description: str = ""
     use_count: int = 0
     created_at: str = ""
@@ -25,6 +31,19 @@ class ExcelTemplate:
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+    def get_name_mapping(self) -> dict[str, str]:
+        """name_mapping JSON → dict"""
+        import json
+        try:
+            m = json.loads(self.name_mapping or "{}")
+            return m if isinstance(m, dict) else {}
+        except Exception:
+            return {}
+
+    def set_name_mapping(self, m: dict[str, str]) -> None:
+        import json
+        self.name_mapping = json.dumps(m, ensure_ascii=False)
 
 
 def _now() -> str:
@@ -78,10 +97,12 @@ class ExcelTemplateRepo:
         with transaction(self.db_path) as conn:
             cur = conn.execute(
                 "INSERT INTO excel_template (project_id, template_name, config_sheet_name, "
-                "table_name_col, sheet_name_col, header_row, data_start_row, description, use_count, "
-                "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "table_name_col, sheet_name_col, header_row, data_start_row, column_start, "
+                "parse_mode, name_mapping, description, use_count, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (t.project_id, t.template_name, t.config_sheet_name,
                  t.table_name_col, t.sheet_name_col, t.header_row, t.data_start_row,
+                 t.column_start, t.parse_mode, t.name_mapping,
                  t.description, t.use_count, now, now),
             )
             return cur.lastrowid
@@ -90,10 +111,11 @@ class ExcelTemplateRepo:
         with transaction(self.db_path) as conn:
             conn.execute(
                 "UPDATE excel_template SET project_id=?, template_name=?, config_sheet_name=?, "
-                "table_name_col=?, sheet_name_col=?, header_row=?, data_start_row=?, description=?, "
-                "updated_at=? WHERE id=?",
+                "table_name_col=?, sheet_name_col=?, header_row=?, data_start_row=?, column_start=?, "
+                "parse_mode=?, name_mapping=?, description=?, updated_at=? WHERE id=?",
                 (t.project_id, t.template_name, t.config_sheet_name,
                  t.table_name_col, t.sheet_name_col, t.header_row, t.data_start_row,
+                 t.column_start, t.parse_mode, t.name_mapping,
                  t.description, _now(), t.id),
             )
 

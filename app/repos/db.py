@@ -90,17 +90,26 @@ CREATE TABLE IF NOT EXISTS excel_template (
   id                 INTEGER PRIMARY KEY,
   project_id         INTEGER REFERENCES project(id) ON DELETE CASCADE,
   template_name      TEXT NOT NULL,
-  config_sheet_name  TEXT NOT NULL,
-  table_name_col     TEXT NOT NULL,
-  sheet_name_col     TEXT NOT NULL,
+  config_sheet_name  TEXT NOT NULL DEFAULT '',
+  table_name_col     TEXT NOT NULL DEFAULT '',
+  sheet_name_col     TEXT NOT NULL DEFAULT '',
   header_row         INTEGER DEFAULT 1,
   data_start_row     INTEGER DEFAULT 2,
+  column_start       INTEGER DEFAULT 1,
+  parse_mode         TEXT DEFAULT 'mapping',  -- mapping / sheet_name / chinese_name
+  name_mapping       TEXT DEFAULT '{}',       -- JSON {中文sheet名: 英文表名}
   description        TEXT,
   use_count          INTEGER DEFAULT 0,
   created_at         TEXT NOT NULL,
   updated_at         TEXT NOT NULL,
   UNIQUE(project_id, template_name)
 );
+
+-- 兼容老库: 如果 excel_template 已存在但没有新列,补加
+-- (用 try/except 包,IF NOT EXISTS SQLite 不支持 ALTER COLUMN)
+
+-- Schema 迁移 — 用单独的 init_db 调,这里只放 DDL
+
 
 -- SQL FTS5
 CREATE VIRTUAL TABLE IF NOT EXISTS sql_snippet_fts USING fts5(
@@ -180,6 +189,8 @@ def init_db(db_path: Path) -> None:
     conn.executescript(SCHEMA_SQL)
     # 迁移:给老库加 dialect 列(SQLite ALTER 不支持 IF NOT EXISTS,要先查)
     _migrate_add_dialect(conn)
+    # 迁移:给老 excel_template 加 3 列(parse_mode / column_start / name_mapping)
+    _migrate_excel_template(conn)
     conn.commit()
 
 
@@ -190,3 +201,22 @@ def _migrate_add_dialect(conn: sqlite3.Connection) -> None:
         conn.execute(
             "ALTER TABLE sql_snippet ADD COLUMN dialect TEXT NOT NULL DEFAULT 'postgres'"
         )
+
+
+def _migrate_excel_template(conn: sqlite3.Connection) -> None:
+    """给老 excel_template 补 3 列:parse_mode / column_start / name_mapping"""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(excel_template)").fetchall()}
+    if "parse_mode" not in cols:
+        conn.execute("ALTER TABLE excel_template ADD COLUMN parse_mode TEXT DEFAULT 'mapping'")
+    if "column_start" not in cols:
+        conn.execute("ALTER TABLE excel_template ADD COLUMN column_start INTEGER DEFAULT 1")
+    if "name_mapping" not in cols:
+        conn.execute("ALTER TABLE excel_template ADD COLUMN name_mapping TEXT DEFAULT '{}'")
+    # 老 schema 里 config_sheet_name / table_name_col / sheet_name_col 是 NOT NULL,
+    # 改成允许空(mode 2/3 不需要这些字段)
+    for col in ("config_sheet_name", "table_name_col", "sheet_name_col"):
+        # 检查表结构,NOT NULL 老行没值会失败;SQLite 不支持改 NOT NULL 约束,只能:
+        # 1) 不改约束,让 model 层默认空字符串
+        # 2) 实际数据 INSERT 时强制给空字符串默认值
+        # 这里选方案 1 — model 层 dataclass default=""
+        pass
