@@ -46,6 +46,45 @@ SK_DIR = "directory"
 SK_EXCEL = "excel"
 
 
+# ============================================================
+# Key 计算 helper(模块级纯函数,跟 diff_engine._normalize 行为一致)
+# 用在 ResultDialog / DiffTab 渲染时按 cmp_cols + 归一化规则算行 key,
+# 跟 DiffResult 里 only_left/only_right 的 key 严格一致。
+# ============================================================
+
+def _cell_key_value(val, case_sensitive: bool, trim: bool):
+    """单 cell 归一化 — 跟 diff_engine._normalize 行为一致(纯 Python 版,无 polars 依赖)。
+
+    关键:只对字符串做归一化,数字 / bool / None 原样返回(否则会被 str() 转字符串,
+    跟 diff_engine 拿到的 polars 原生类型(int / float / None) hash 不一致,
+    导致 set 查找不到,UI 染色 / 匹配全失效)。
+    """
+    if val is None:
+        return None
+    if not isinstance(val, str):
+        # 数字 / bool / 日期 等 — 跟 diff_engine 一样原样返回
+        return val
+    s = val
+    if trim:
+        import re as _re
+        s = _re.sub(r"\s+", " ", s).strip()
+        if s == "":
+            return None
+    if not case_sensitive:
+        s = s.lower()
+    return s
+
+
+def _row_key(row: dict, cmp_cols: list[str],
+             case_sensitive: bool, trim: bool) -> tuple:
+    """按 cmp_cols + 归一化规则算行 key,跟 diff_engine 算出来的 _RowDiff.key 完全一致。
+    不用 common_cols(可能跟 cmp_cols 顺序不同,会导致染色/匹配错位)。"""
+    return tuple(
+        _cell_key_value(row.get(c), case_sensitive, trim)
+        for c in cmp_cols
+    )
+
+
 @dataclass
 class DiffSource:
     """一个数据源 — 统一抽象"""
@@ -570,8 +609,10 @@ class MappingRow(QFrame):
         self.cols_btn.setMinimumWidth(72)
         h.addWidget(self.cols_btn)
 
-        # 区分大小写 / trim(默认 false)
+        # 不区分大小写(label 描述"勾上后启用的行为")— 默认不勾 = 区分大小写
+        # 字段 case_sensitive = not isChecked():勾上 = False(不区分),不勾 = True(区分)
         self.case_chk = QCheckBox(tr("diff.row.case"))
+        # 默认 unchecked(区分大小写)— 特殊情况用户再勾上 = 不区分
         self.trim_chk = QCheckBox(tr("diff.row.trim"))
         h.addWidget(self.case_chk)
         h.addWidget(self.trim_chk)
@@ -673,7 +714,9 @@ class MappingRow(QFrame):
         if not p:
             return
         self.mode_combo.setCurrentIndex(self.mode_combo.findData(p.get("mode", "all")))
-        self.case_chk.setChecked(p.get("case_sensitive", False))
+        # checkbox 语义"不区分大小写"(勾上=启用),跟字段 case_sensitive(区分大小写)取反
+        # 默认值 True(区分大小写)— 跟用户期望的"默认不勾=区分"对齐
+        self.case_chk.setChecked(not p.get("case_sensitive", True))
         self.trim_chk.setChecked(p.get("trim", False))
         self._selected_cols = list(p.get("cols", []))
         if self._selected_cols:
@@ -693,7 +736,8 @@ class MappingRow(QFrame):
             "a_table": self._a_table,
             "mode": self.mode_combo.currentData(),
             "cols": list(self._selected_cols),
-            "case_sensitive": self.case_chk.isChecked(),
+            # case_sensitive 字段语义 = "区分大小写",跟 checkbox"不区分大小写"取反
+            "case_sensitive": not self.case_chk.isChecked(),
             "trim": self.trim_chk.isChecked(),
         }
         save_preset(name.strip(), config)
@@ -727,7 +771,8 @@ class MappingRow(QFrame):
             return None
         cfg = DiffConfig(
             compare_columns=compare_cols,
-            case_sensitive=self.case_chk.isChecked(),
+            # checkbox 语义"不区分大小写",跟字段 case_sensitive(区分大小写)取反
+            case_sensitive=not self.case_chk.isChecked(),
             trim_whitespace=self.trim_chk.isChecked(),
         )
         return (TableMatch(
@@ -1459,9 +1504,6 @@ class ResultDialog(QDialog):
             return
         self._render_pair(r)
 
-    def _row_key(self, row: dict, common_cols: list[str]) -> tuple:
-        return tuple(row.get(c) for c in common_cols)
-
     def _render_pair(self, r: dict) -> None:
         """切换匹配对时调:设置 delegate + tab 标题 + 缓存 match,只填当前可见 tab"""
         m = r["match"]
@@ -1469,6 +1511,10 @@ class ResultDialog(QDialog):
         common_cols = r.get("common_cols", [])
         left_rows = r.get("left_rows", [])
         right_rows = r.get("right_rows", [])
+        # key 算子:cmp_cols + 归一化规则(从 DiffResult 拿,跟 diff_engine 算 key 严格一致)
+        cmp_cols = res.get("cmp_cols") or list(common_cols)
+        case_sensitive = res.get("case_sensitive", False)
+        trim_ws = res.get("trim_whitespace", True)
         if not common_cols:
             if left_rows:
                 common_cols = list(left_rows[0].keys())
@@ -1502,7 +1548,7 @@ class ResultDialog(QDialog):
         a_diff = QColor("#0d4a2e")
         def a_bg_getter(row, col):
             if 0 <= row < len(left_rows):
-                key = self._row_key(left_rows[row], common_cols)
+                key = _row_key(left_rows[row], cmp_cols, case_sensitive, trim_ws)
                 if key in only_left_keys:
                     return a_diff
             return a_normal
@@ -1512,7 +1558,7 @@ class ResultDialog(QDialog):
         b_diff = QColor("#4a1a1a")
         def b_bg_getter(row, col):
             if 0 <= row < len(right_rows):
-                key = self._row_key(right_rows[row], common_cols)
+                key = _row_key(right_rows[row], cmp_cols, case_sensitive, trim_ws)
                 if key in only_right_keys:
                     return b_diff
             return b_normal
@@ -1550,6 +1596,10 @@ class ResultDialog(QDialog):
         common_cols = r.get("common_cols", [])
         left_rows = r.get("left_rows", [])
         right_rows = r.get("right_rows", [])
+        # key 算子:cmp_cols + 归一化规则(从 DiffResult 拿,跟 diff_engine 算 key 严格一致)
+        cmp_cols = res.get("cmp_cols") or list(common_cols)
+        case_sensitive = res.get("case_sensitive", True)
+        trim_ws = res.get("trim_whitespace", True)
         if not common_cols:
             if left_rows:
                 common_cols = list(left_rows[0].keys())
@@ -1584,6 +1634,7 @@ class ResultDialog(QDialog):
                 [(i + 1, lr) for i, lr in enumerate(left_rows)],
                 res["only_left"],
                 common_cols,
+                cmp_cols=cmp_cols, case_sensitive=case_sensitive, trim_ws=trim_ws,
                 bg_hex="#0d4a2e", fg_hex="#86efac",
             )
         elif idx == 2:
@@ -1593,6 +1644,7 @@ class ResultDialog(QDialog):
                 [(i + 1, rr) for i, rr in enumerate(right_rows)],
                 res["only_right"],
                 common_cols,
+                cmp_cols=cmp_cols, case_sensitive=case_sensitive, trim_ws=trim_ws,
                 bg_hex="#4a1a1a", fg_hex="#fca5a5",
             )
         elif idx == 3:
@@ -1600,15 +1652,18 @@ class ResultDialog(QDialog):
             self._render_unchanged_table(
                 self.unchanged_view,
                 left_rows, right_rows, common_cols,
+                cmp_cols=cmp_cols, case_sensitive=case_sensitive, trim_ws=trim_ws,
             )
         elif idx == 4:
             # A 数据
             self._render_single_file(self.content_view_a, left_rows, common_cols,
-                                     side="A", only_keys=only_left_keys)
+                                     side="A", only_keys=only_left_keys,
+                                     cmp_cols=cmp_cols, case_sensitive=case_sensitive, trim_ws=trim_ws)
         elif idx == 5:
             # B 数据
             self._render_single_file(self.content_view_b, right_rows, common_cols,
-                                     side="B", only_keys=only_right_keys)
+                                     side="B", only_keys=only_right_keys,
+                                     cmp_cols=cmp_cols, case_sensitive=case_sensitive, trim_ws=trim_ws)
         self._loaded_tabs.add(idx)
         # 差分摘要
         self._render_summary_table(self.diff_view, [
@@ -1626,18 +1681,26 @@ class ResultDialog(QDialog):
     def _render_diff_table(self, table: QTableWidget,
                            all_rows_with_idx, diff_list,
                            common_cols: list[str],
+                           cmp_cols: list[str] = None,
+                           case_sensitive: bool = False,
+                           trim_ws: bool = True,
                            bg_hex: str = "#3b1f1f", fg_hex: str = "#fca5a5") -> None:
         """把 diff_list 对应到 all_rows,真实 cell 显示。
 
         配色:浅色背景 + 对比度足够的文字色(不冲突)。
         - 多(新增): 浅绿 bg #14302a + 亮绿 fg #6ee7b7
         - 缺(删除): 浅红 bg #3b1f1f + 亮红 fg #fca5a5
+
+        cmp_cols / case_sensitive / trim_ws: 用 diff_engine 同一套归一化规则算行 key
+        (默认 fallback 到 common_cols + case_sensitive=False + trim_ws=True, 兼容老调用)
         """
         from PySide6.QtGui import QColor
+        if cmp_cols is None:
+            cmp_cols = common_cols
         diff_keys = set(tuple(d.get("key", ())) for d in diff_list)
         rows_to_show = []
         for original_idx, row in all_rows_with_idx:
-            key = self._row_key(row, common_cols)
+            key = _row_key(row, cmp_cols, case_sensitive, trim_ws)
             if key in diff_keys:
                 rows_to_show.append((original_idx, row))
         rows_to_show = rows_to_show[:1000]
@@ -1657,12 +1720,17 @@ class ResultDialog(QDialog):
 
     def _render_single_file(self, table: QTableWidget, rows: list[dict],
                               common_cols: list[str], side: str,
-                              only_keys: set = None) -> None:
+                              only_keys: set = None,
+                              cmp_cols: list[str] = None,
+                              case_sensitive: bool = False,
+                              trim_ws: bool = True) -> None:
         """单文件视图:在 A/B tab 显示完整数据,**只在差异行(only_left/only_right)高亮**。
 
         - 普通行(在对方也存在的):浅底色 #1e293b(几乎看不出,仅作行间区分)
         - 差异行(在对方不存在的):强烈底色 — A 端差异用深绿(新增),B 端差异用深红(缺少)
         - 行号列(verticalHeader)同步染色,让用户一眼定位
+
+        cmp_cols / case_sensitive / trim_ws: 用 diff_engine 同一套归一化规则算行 key
         """
         from PySide6.QtGui import QColor
         all_cols = common_cols
@@ -1670,6 +1738,8 @@ class ResultDialog(QDialog):
             all_cols = list(rows[0].keys())
         if not all_cols:
             return
+        if cmp_cols is None:
+            cmp_cols = all_cols
         table.clear()
         table.setColumnCount(len(all_cols))
         table.setHorizontalHeaderLabels(list(all_cols))
@@ -1690,7 +1760,7 @@ class ResultDialog(QDialog):
         vh = table.verticalHeader()
         vh_default = QColor("#1e293b")
         for r_i, row_data in enumerate(rows):
-            row_key = self._row_key(row_data, all_cols)
+            row_key = _row_key(row_data, cmp_cols, case_sensitive, trim_ws)
             is_diff = row_key in diff_keys
             if is_diff:
                 bg, fg = diff_bg, diff_fg
@@ -1716,17 +1786,22 @@ class ResultDialog(QDialog):
                 table.setItem(r_i, c_i, item)
 
     def _render_unchanged_table(self, table: QTableWidget,
-                                left_rows, right_rows, common_cols) -> None:
+                                left_rows, right_rows, common_cols,
+                                cmp_cols: list[str] = None,
+                                case_sensitive: bool = False,
+                                trim_ws: bool = True) -> None:
         """未变 tab — A 和 B 都有、内容相同的行(整行 set-based 匹配)。
         浅灰背景 + 默认浅色字体,跟多/缺区分开。
         """
         from PySide6.QtGui import QColor
         if not common_cols:
             return
+        if cmp_cols is None:
+            cmp_cols = common_cols
         left_dict = {}
         for lr in left_rows:
-            left_dict[self._row_key(lr, common_cols)] = lr
-        right_keys = set(self._row_key(rr, common_cols) for rr in right_rows)
+            left_dict[_row_key(lr, cmp_cols, case_sensitive, trim_ws)] = lr
+        right_keys = set(_row_key(rr, cmp_cols, case_sensitive, trim_ws) for rr in right_rows)
         # 公共 key(在两边都存在)
         common_keys = [k for k in left_dict if k in right_keys][:1000]
         table.clear()

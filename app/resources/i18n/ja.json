@@ -349,7 +349,7 @@
   "diff.row.delete_preset.confirm": "プリセット \"{name}\" を削除しますか?",
   "diff.row.pk": "PK:",
   "diff.row.mode": "判定:",
-  "diff.row.case": "大文字小文字",
+  "diff.row.case": "大文字小文字を区別しない",
   "diff.row.trim": "trim",
   "diff.col_picker.tip": "判定に使う列にチェック(複数可、デフォルト空)",
   "diff.col_picker.all": "全選択",

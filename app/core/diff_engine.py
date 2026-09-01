@@ -111,6 +111,11 @@ class DiffResult:
     total_left: int
     total_right: int
     column_diff_stats: dict = field(default_factory=dict)
+    # 实际参与 key 的列(供 UI 端用同样规则算行 key)
+    cmp_cols: list[str] = field(default_factory=list)
+    # 归一化规则(供 UI 端算 key 时用,跟 _normalize 行为保持一致)
+    case_sensitive: bool = False
+    trim_whitespace: bool = True
 
     def to_dict(self) -> dict:
         return {
@@ -130,6 +135,9 @@ class DiffResult:
             "total_left": self.total_left,
             "total_right": self.total_right,
             "column_diff_stats": self.column_diff_stats,
+            "cmp_cols": list(self.cmp_cols),
+            "case_sensitive": self.case_sensitive,
+            "trim_whitespace": self.trim_whitespace,
         }
 
 
@@ -138,8 +146,9 @@ class DiffEngine:
         """set-based 内容比较:行号不重要,只看 A 的某行内容是否在 B 集合里存在。
 
         Returns: (DiffResult, left_rows, right_rows, common_cols)
-        - left_rows / right_rows: 完整行数据(用 list index 当 row_id)
+        - left_rows / right_rows: **原始**完整行数据(供 UI 展示/导出,不被归一化污染)
         - common_cols: A/B 共同列(用于 UI 展示)
+        - DiffResult.cmp_cols / case_sensitive / trim_whitespace: 供 UI 端按同样规则算行 key
         """
         left_df = _read(left_path)
         right_df = _read(right_path)
@@ -164,15 +173,20 @@ class DiffEngine:
         # 共同列(用于 UI)
         common_cols = [c for c in all_cols if c in (right_df.columns)]
 
-        # Normalize
+        # 原始行 — 供 UI 展示 / 导出,保持原值(不 lower / 不 trim)
+        left_raw = left_df.to_dicts()
+        right_raw = right_df.to_dicts()
+
+        # Normalize(仅用于算 key,set-based 比较)
         left_n = _normalize(left_df, cmp_cols, config.case_sensitive, config.trim_whitespace)
         right_n = _normalize(right_df, cmp_cols, config.case_sensitive, config.trim_whitespace)
 
-        # 转成 (key, row) list
+        # key 算子:按 normalize 后的 row 取 cmp_cols tuple
         def _key(r):
             return tuple(r[c] for c in cmp_cols)
-        left_list = [(_key(r), r) for r in left_n.to_dicts()]
-        right_list = [(_key(r), r) for r in right_n.to_dicts()]
+        # 关键:key 来自 normalize 后的 row,但 left_row / right_row 用原始 row(展示用)
+        left_list = [(_key(rn), rr) for rr, rn in zip(left_raw, left_n.to_dicts())]
+        right_list = [(_key(rn), rr) for rr, rn in zip(right_raw, right_n.to_dicts())]
 
         # set-based:每行的 key 是否在另一边的 keys 集合里
         right_keys = set(k for k, _ in right_list)
@@ -197,9 +211,10 @@ class DiffEngine:
             unchanged_count=unchanged,
             total_left=len(left_list), total_right=len(right_list),
             column_diff_stats=col_stats,
+            cmp_cols=cmp_cols,
+            case_sensitive=config.case_sensitive,
+            trim_whitespace=config.trim_whitespace,
         )
-        # 关键:传 normalize 后的 rows 给 UI,这样 _row_key() 算的 key 跟 only_left[i]["key"] 一致
-        # (only_left 的 key 是 normalize 后的 cmp_cols tuple)
-        left_rows = left_n.to_dicts()
-        right_rows = right_n.to_dicts()
-        return result, left_rows, right_rows, common_cols
+        # 关键:传**原始** rows 给 UI,展示/导出不被归一化污染
+        # UI 端用 _cell_key_value 跟 cmp_cols/case_sensitive/trim_whitespace 算行 key
+        return result, left_raw, right_raw, common_cols

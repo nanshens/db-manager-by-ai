@@ -349,7 +349,7 @@
   "diff.row.delete_preset.confirm": "Delete preset \"{name}\"?",
   "diff.row.pk": "PK:",
   "diff.row.mode": "Rule:",
-  "diff.row.case": "case",
+  "diff.row.case": "case-insensitive",
   "diff.row.trim": "trim",
   "diff.col_picker.tip": "Tick columns to match (multi-select)",
   "diff.col_picker.all": "All",

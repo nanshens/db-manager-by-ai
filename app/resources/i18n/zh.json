@@ -354,7 +354,7 @@
   "diff.row.delete_preset.confirm": "删除预设 \"{name}\"?",
   "diff.row.pk": "PK:",
   "diff.row.mode": "判别:",
-  "diff.row.case": "区分大小写",
+  "diff.row.case": "不区分大小写",
   "diff.row.trim": "trim 空白",
   "diff.col_picker.tip": "勾选要参与匹配的列(可多选)",
   "diff.col_picker.all": "全选",
