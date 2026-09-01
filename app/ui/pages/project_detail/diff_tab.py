@@ -310,7 +310,7 @@ class SourcePanel(QFrame):
         tables = {}
         for r in results:
             if not r.error:
-                tmp_csv = self._excel_to_tmp_csv(path, r)
+                tmp_csv = self._excel_to_tmp_csv(path, r, tpl=tpl)
                 if tmp_csv:
                     tables[r.table_name] = tmp_csv
         if not tables:
@@ -324,13 +324,31 @@ class SourcePanel(QFrame):
         self._add_source(src)
         show_toast(f"已添加 Excel 源(模板: {tpl.template_name})", "success")
 
-    def _excel_to_tmp_csv(self, excel_path: str, parse_result) -> Optional[str]:
-        """把 ParseResult 里的表数据写到临时 CSV 供 diff 用"""
+    def _excel_to_tmp_csv(self, excel_path: str, parse_result, tpl=None) -> Optional[str]:
+        """把 ParseResult 里的表数据写到临时 CSV 供 diff 用
+        关键:把 template 的 header_row / data_start_row / column_start 应用到这次读取,
+        否则 tmp CSV 的列定义/数据偏移跟 _parse_sheet 预览时不一致,导致 key 错位。
+        """
         try:
             import tempfile
             from app.core.excel_parser import _read_sheet_fast
-            # 用 fastexcel(calamine)直接读 — 比 pl.read_excel(openpyxl) 快 8x,无 FutureWarning
-            df = _read_sheet_fast(excel_path, parse_result.sheet_name, header_row=0)
+            # 取 template(从 parse_result 拿,或者外部传)
+            template = tpl or getattr(parse_result, "_template", None)
+            if template and (template.header_row > 1 or template.data_start_row > template.header_row + 1):
+                # 跟 _parse_sheet 一样的处理:无 header + 后切
+                raw = _read_sheet_fast(excel_path, parse_result.sheet_name, header_row=None)
+                if raw.height < template.data_start_row:
+                    return None
+                hdr = raw.row(template.header_row - 1)
+                df = raw.slice(template.data_start_row - 1)
+                new_cols = [str(c) if c is not None else f"col_{i}" for i, c in enumerate(hdr)]
+                df = df.rename(dict(zip(df.columns, new_cols)))
+            else:
+                # header_row=1, data_start_row=2:fastexcel 默认第 1 行当 header
+                df = _read_sheet_fast(excel_path, parse_result.sheet_name, header_row=0)
+            # column_start: 切前 column_start-1 列
+            if template and template.column_start > 1:
+                df = df.select(df.columns[template.column_start - 1:])
             if df.height < 1:
                 return None
             tmp = tempfile.NamedTemporaryFile(

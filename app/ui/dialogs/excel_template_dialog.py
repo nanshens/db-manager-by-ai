@@ -209,9 +209,38 @@ class ExcelTemplateDialog(QDialog):
         self.data_spin = QSpinBox()
         self.data_spin.setRange(1, 9999)
         self.data_spin.setValue(self._template.data_start_row if self._template else 2)
-        self.col_spin = QSpinBox()
-        self.col_spin.setRange(1, 9999)
-        self.col_spin.setValue(self._template.column_start if self._template else 1)
+        # 数据起始列 — editable QComboBox(可手输超过 30 列),CSS 三角形画下拉箭头
+        self.col_combo = QComboBox()
+        self.col_combo.setEditable(True)
+        self.col_combo.setMinimumWidth(120)
+        self.col_combo.lineEdit().setPlaceholderText("选/输入字母(A..AD,超出手输)")
+        # CSS 三角形 + dark theme 配色,让下拉箭头在深色下明显
+        self.col_combo.setStyleSheet(
+            "QComboBox { padding-right: 28px; }"
+            "QComboBox::drop-down {"
+            "  subcontrol-origin: padding;"
+            "  subcontrol-position: top right;"
+            "  width: 28px;"
+            "  border-left: 1px solid #475569;"
+            "  background: #1e293b;"
+            "}"
+            "QComboBox::down-arrow {"
+            "  width: 0; height: 0;"
+            "  border-left: 5px solid transparent;"
+            "  border-right: 5px solid transparent;"
+            "  border-top: 6px solid #cbd5e1;"
+            "  margin-top: 4px;"
+            "  background: transparent;"
+            "}"
+        )
+        # 默认 30 个字母选项
+        for i in range(30):
+            letter = _col_letter(i)
+            self.col_combo.addItem(letter)
+            self.col_combo.setItemData(self.col_combo.count() - 1, str(i + 1))
+        # 老 template 恢复:把 column_start 数字转字母显示
+        if self._template:
+            self.col_combo.setCurrentText(_col_letter(self._template.column_start - 1))
         row2 = QHBoxLayout()
         row2.setSpacing(8)
         row2.addWidget(QLabel("表头行"))
@@ -219,7 +248,7 @@ class ExcelTemplateDialog(QDialog):
         row2.addWidget(QLabel("数据起始行"))
         row2.addWidget(self.data_spin)
         row2.addWidget(QLabel("数据起始列"))
-        row2.addWidget(self.col_spin)
+        row2.addWidget(self.col_combo, 1)
         row2.addStretch()
         dfv.addLayout(row2)
         layout.addWidget(data_frame)
@@ -296,10 +325,18 @@ class ExcelTemplateDialog(QDialog):
         try:
             wb = openpyxl.load_workbook(self._file_path, read_only=True, data_only=True)
             self._sheet_names = list(wb.sheetnames)
+            # 同时读第一个 sheet 的前 30 列表头(用于 col_combo tooltip)
+            first_col_names = []
+            if self._sheet_names:
+                ws = wb[self._sheet_names[0]]
+                rows = list(ws.iter_rows(min_row=1, max_row=1, values_only=True))
+                if rows and rows[0]:
+                    first_col_names = [str(c).strip() if c is not None else "" for c in rows[0][:30]]
             wb.close()
         except Exception as e:
             QMessageBox.warning(self, "错误", f"无法读取 Excel: {e}")
             self._sheet_names = []
+            first_col_names = []
         # 刷 sheet_combo(纯下拉,非 editable)
         self.sheet_combo.blockSignals(True)
         current = self.sheet_combo.currentText()
@@ -309,9 +346,35 @@ class ExcelTemplateDialog(QDialog):
         if current and current in self._sheet_names:
             self.sheet_combo.setCurrentText(current)
         self.sheet_combo.blockSignals(False)
+        # 刷 col_combo(数据起始列) — 默认 30 个字母(A-Z + AA-AD),选了 xlsx 后列名作为 tooltip
+        self._refresh_col_combo(first_col_names)
         # 刷映射表(模式 3)
         if self.mode_combo.currentData() == "chinese_name":
             self._refresh_mapping_table()
+
+    def _refresh_col_combo(self, first_col_names: list[str] = None):
+        """刷新数据起始列下拉 — 30 个字母 (A-Z + AA-AD),列名作为 tooltip 提示"""
+        first_col_names = first_col_names or []
+        self.col_combo.blockSignals(True)
+        current = self.col_combo.currentText()
+        self.col_combo.clear()
+        for i in range(30):
+            letter = _col_letter(i)
+            self.col_combo.addItem(letter)
+            # itemData 存 1-based index(get_template 用 currentData() 拿)
+            self.col_combo.setItemData(self.col_combo.count() - 1, str(i + 1))
+            # tooltip:列名作为提示(只读,不显示在选项里,保持下拉简洁)
+            if i < len(first_col_names) and first_col_names[i]:
+                tip = f"{letter}  ({first_col_names[i]})"
+            else:
+                tip = letter
+            self.col_combo.setItemData(self.col_combo.count() - 1, tip, Qt.ItemDataRole.ToolTipRole)
+        # 恢复用户之前的值
+        if current:
+            idx = self.col_combo.findText(current)
+            if idx >= 0:
+                self.col_combo.setCurrentIndex(idx)
+        self.col_combo.blockSignals(False)
 
     def _on_config_sheet_changed(self, sheet_name: str) -> None:
         """用户选 config sheet → 读列数,刷两个字母下拉"""
@@ -523,6 +586,14 @@ class ExcelTemplateDialog(QDialog):
             mapping = json.dumps(self._collect_mapping(), ensure_ascii=False)
         else:
             mapping = "{}"
+        # 数据起始列 — 支持字母 (C → 3) / 数字 (3 → 3) / "A | 供应商编号" (取字母段)
+        col_text = self.col_combo.currentText().strip()
+        col_idx = self.col_combo.currentData()
+        if col_idx is not None:
+            # 从 itemData 直接拿(1-based index)
+            column_start = int(col_idx)
+        else:
+            column_start = self._parse_col_to_index(col_text) or 1
         return {
             "template_name": self.name_edit.text().strip(),
             "project_id": project_id,
@@ -532,7 +603,28 @@ class ExcelTemplateDialog(QDialog):
             "sheet_name_col": self.sn_col_combo.currentText().strip() if mode == "mapping" else "",
             "header_row": self.header_spin.value(),
             "data_start_row": self.data_spin.value(),
-            "column_start": self.col_spin.value(),
+            "column_start": column_start,
             "name_mapping": mapping,
             "description": self.desc_edit.toPlainText().strip(),
         }
+
+    def _parse_col_to_index(self, text: str) -> int:
+        """'A' / 'a' / 'A | xxx' / '3' / '' → 1-based index;失败返回 0"""
+        s = (text or "").strip()
+        if not s:
+            return 0
+        # 字母段(在 '|' 之前的部分)
+        if "|" in s:
+            s = s.split("|")[0].strip()
+        if not s:
+            return 0
+        # 字母
+        if s.replace(" ", "").isalpha():
+            n = 0
+            for ch in s.upper():
+                n = n * 26 + (ord(ch) - ord('A') + 1)
+            return n
+        # 数字
+        if s.isdigit():
+            return int(s)
+        return 0
