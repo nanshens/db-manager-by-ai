@@ -1315,13 +1315,32 @@ class ResultDialog(QDialog):
             res = r["result"]
             n_add = len(res["only_right"])
             n_del = len(res["only_left"])
-            item = QListWidgetItem(f"OK {key}  (-{n_del}/+{n_add}/={res['unchanged_count']})")
+            n_unch = res["unchanged_count"]
+            # 完全无差异 → OK 绿色;有差异 → NG 红色
+            from PySide6.QtGui import QColor
+            has_diff = n_add > 0 or n_del > 0
+            if has_diff:
+                label = f"NG {key}  (-{n_del}/+{n_add}/={n_unch})"
+                color = QColor("#ef4444")  # 红
+            else:
+                label = f"OK {key}  (={n_unch})"
+                color = QColor("#22c55e")  # 绿
+            item = QListWidgetItem(label)
+            item.setForeground(color)
+            # NG 加粗
+            if has_diff:
+                font = item.font()
+                font.setBold(True)
+                item.setFont(font)
             item.setData(Qt.ItemDataRole.UserRole, key)
             self.pair_list.addItem(item)
         for a, msg in errors:
             item = QListWidgetItem(f"ERR {a}  ({msg[:40]})")
             from PySide6.QtGui import QColor
             item.setForeground(QColor("#ef4444"))
+            font = item.font()
+            font.setBold(True)
+            item.setFont(font)
             self.pair_list.addItem(item)
         if self.pair_list.count() > 0:
             self.pair_list.setCurrentRow(0)
