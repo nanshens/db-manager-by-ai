@@ -97,3 +97,87 @@ def generate_bulk_insert_pg(table: str, columns: Iterable[str], values: list[lis
     for row in values:
         val_rows.append("(" + ", ".join(_value(v) for v in row) + ")")
     return f"INSERT INTO {_quote_ident(table)} ({col_list}) VALUES\n  " + ",\n  ".join(val_rows) + ";"
+
+
+# ---------------------------------------------------------------------------
+# Export Insert SQL (命令行) — 用 pg_dump / mysqldump / expdp 把表数据导出为 INSERT SQL
+# ---------------------------------------------------------------------------
+def _shell_quote(s: str) -> str:
+    """shell 安全引号包裹(单引号,内嵌单引号转义为 '\\'')"""
+    if not s:
+        return "''"
+    return "'" + s.replace("'", "'\\''") + "'"
+
+
+def _shell_quote_double(s: str) -> str:
+    """双引号包裹(用于 expdp 的连接串)"""
+    if not s:
+        return '""'
+    return '"' + s.replace('"', '\\"').replace('\\', '\\\\') + '"'
+
+
+def generate_export_insert(
+    table: str,
+    db_type: str,
+    host: str,
+    port: int,
+    username: str,
+    password: str,
+    database: str,
+    schema: str,
+    service_name: str = "",
+    out_dir: str = ".",
+) -> str:
+    """生成导出表数据为 INSERT SQL 的命令行(不执行,只生成命令文本)。
+
+    postgres:
+        pg_dump -h {host} -p {port} -U {user} -d {db} -t {schema}.{table}
+                --data-only --inserts > {out_dir}/{table}.sql
+
+    mysql:
+        mysqldump -h {host} -P {port} -u {user} -p{password} {db} {table}
+                --no-create-info --complete-insert --skip-comments
+                > {out_dir}/{table}.sql
+
+    oracle (expdp / Data Pump):
+        expdp {user}/\"{password}\"@{host}:{port}/{service}
+                TABLES={schema}.{table} DIRECTORY=DATA_PUMP_DIR
+                DUMPFILE={table}.dmp CONTENT=DATA_ONLY
+                (再 impdp 还原时加参数,生成 .sql 的等价做法不在 expdp 标准能力内)
+    """
+    safe_table = _shell_quote(table)
+    out_path = f"{out_dir.rstrip('/').rstrip('\\\\') or '.'}/{table}.sql"
+    quoted_out = _shell_quote(out_path)
+    if db_type == "postgres":
+        host_q = _shell_quote(host)
+        user_q = _shell_quote(username)
+        db_q = _shell_quote(database)
+        # schema.table 作为 -t 参数,需要 shell 安全的 schema+table
+        sch_table_q = _shell_quote(f"{schema}.{table}")
+        return (
+            f"pg_dump -h {host_q} -p {int(port) or 5432} -U {user_q} -d {db_q} "
+            f"-t {sch_table_q} --data-only --inserts > {quoted_out}"
+        )
+    if db_type == "mysql":
+        # mysqldump -p 直接接密码(无空格),或用 --defaults-file
+        # 简单做法: -p{password} 紧贴(无空格),password 内不能含空格
+        pwd_inline = password  # mysqldump 兼容
+        host_q = _shell_quote(host)
+        db_q = _shell_quote(database)
+        tbl_q = _shell_quote(table)
+        return (
+            f"mysqldump -h {host_q} -P {int(port) or 3306} -u {_shell_quote(username)} "
+            f"-p{pwd_inline} {db_q} {tbl_q} "
+            f"--no-create-info --complete-insert --skip-comments --default-character-set=utf8mb4 "
+            f"> {quoted_out}"
+        )
+    if db_type == "oracle":
+        # expdp 不直接生成 INSERT SQL 文件,默认导 .dmp(用 CONTENT=DATA_ONLY 只导数据)
+        # 想真正生成 .sql(INSERT 语句),用 SQL*Plus 的 spool 路线
+        conn = f"{_shell_quote_double(username)}/{_shell_quote_double(password)}@{host}:{int(port) or 1521}/{service_name}"
+        return (
+            f"expdp {conn} TABLES={schema}.{table} DIRECTORY=DATA_PUMP_DIR "
+            f"DUMPFILE={table}.dmp CONTENT=DATA_ONLY LOGFILE={table}_expdp.log"
+        )
+    raise ValueError(f"Unsupported db_type: {db_type!r}")
+

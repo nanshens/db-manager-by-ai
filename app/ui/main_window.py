@@ -15,6 +15,7 @@ from app import __app_name__, __version__
 from app.ui import i18n
 from app.ui.pages import (
     ProjectsPage, SqlLibPage, ExcelTemplatesPage, SettingsPage, FileConvertPage,
+    DbLinksPage,
 )
 from app.ui.pages.project_detail_page import ProjectDetailPage
 from app.ui.widgets import show_toast
@@ -27,6 +28,7 @@ class PageId(str, Enum):
     SQLLIB = "sqllib"
     EXCEL_TPL = "excel_tpl"
     FILE_CONVERT = "file_convert"
+    DB_LINKS = "db_links"
     PROJECT_DETAIL = "project_detail"
     SETTINGS = "settings"
 
@@ -37,6 +39,7 @@ NAV_ITEMS = [
     (PageId.SQLLIB, "mdi6.database", "nav.sqllib"),
     (PageId.EXCEL_TPL, "mdi6.microsoft-excel", "nav.excel_templates"),
     (PageId.FILE_CONVERT, "mdi6.file-replace-outline", "nav.file_convert"),
+    (PageId.DB_LINKS, "mdi6.database-cog-outline", "nav.db_links"),
 ]
 
 EXPANDED_WIDTH = 220
@@ -169,6 +172,7 @@ class MainWindow(QMainWindow):
         self.sqllib_page = SqlLibPage()
         self.excel_tpl_page = ExcelTemplatesPage()
         self.file_convert_page = FileConvertPage()
+        self.db_links_page = DbLinksPage()
         self.project_detail_page = ProjectDetailPage()
         self.project_detail_page.back_clicked.connect(lambda: self._switch_page(PageId.PROJECTS))
         self.project_detail_page.project_updated.connect(lambda: self.projects_page.refresh())
@@ -179,13 +183,14 @@ class MainWindow(QMainWindow):
         self.settings_page.theme_changed.connect(self._on_theme_change_requested)
         self.settings_page.language_changed.connect(self._on_language_change_requested)
 
-        # 顺序:projects, sqllib, excel_tpl, file_convert, project_detail, settings
+        # 顺序:projects, sqllib, excel_tpl, file_convert, db_links, project_detail, settings
         self.stack.addWidget(self.projects_page)           # 0
         self.stack.addWidget(self.sqllib_page)             # 1
         self.stack.addWidget(self.excel_tpl_page)          # 2
         self.stack.addWidget(self.file_convert_page)       # 3
-        self.stack.addWidget(self.project_detail_page)     # 4
-        self.stack.addWidget(self.settings_page)           # 5
+        self.stack.addWidget(self.db_links_page)           # 4
+        self.stack.addWidget(self.project_detail_page)     # 5
+        self.stack.addWidget(self.settings_page)           # 6
 
         # 保存 page_id → index 映射
         self._page_index = {
@@ -193,8 +198,9 @@ class MainWindow(QMainWindow):
             PageId.SQLLIB: 1,
             PageId.EXCEL_TPL: 2,
             PageId.FILE_CONVERT: 3,
-            PageId.PROJECT_DETAIL: 4,
-            PageId.SETTINGS: 5,
+            PageId.DB_LINKS: 4,
+            PageId.PROJECT_DETAIL: 5,
+            PageId.SETTINGS: 6,
         }
 
         rl.addWidget(self.stack, 1)
@@ -210,7 +216,8 @@ class MainWindow(QMainWindow):
             ("Ctrl+2", PageId.SQLLIB),
             ("Ctrl+3", PageId.EXCEL_TPL),
             ("Ctrl+4", PageId.FILE_CONVERT),
-            ("Ctrl+5", PageId.SETTINGS),
+            ("Ctrl+5", PageId.DB_LINKS),
+            ("Ctrl+6", PageId.SETTINGS),
         ]
         for seq, pid in page_map:
             QShortcut(QKeySequence(seq), self, activated=lambda p=pid: self._switch_page(p))

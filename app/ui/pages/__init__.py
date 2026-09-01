@@ -6,13 +6,14 @@ from .excel_templates_page import ExcelTemplatesPage
 from .settings_page import SettingsPage
 from .project_detail_page import ProjectDetailPage
 from .file_convert_page import FileConvertPage
+from .db_links_page import DbLinksPage
 
 __all__ = [
     "BasePage",
     "ProjectsPage",
     "SqlLibPage",
     "ExcelTemplatesPage",
-    "SettingsPage",
     "ProjectDetailPage",
     "FileConvertPage",
+    "DbLinksPage",
 ]

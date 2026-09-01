@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout, QVBoxLayout, QPushButton, QLabel, QFrame, QCheckBox,
     QRadioButton, QButtonGroup, QPlainTextEdit, QListWidget,
     QListWidgetItem, QMessageBox, QWidget, QSplitter,
-    QAbstractItemView, QLineEdit,
+    QAbstractItemView, QLineEdit, QComboBox,
 )
 import qtawesome as qta
 
@@ -24,6 +24,7 @@ from app.ui.dialogs import SqlSnippetDialog
 from app.services.registry import reg
 from app.core.sqlgen import (
     generate_insert, generate_delete, generate_copy, generate_csv_export,
+    generate_export_insert,
 )
 
 
@@ -92,8 +93,21 @@ class SqlGenTab(QWidget):
         self.op_delete = QCheckBox("DELETE")
         self.op_import = QCheckBox("Import CSV/TSV")
         self.op_export = QCheckBox("Export CSV/TSV")
+        # Export Insert SQL 跟 DB 链接选同一行(checkbox + combo 紧邻)
+        self.op_export_insert = QCheckBox("Export Insert SQL (dump)")
+        self.ei_link_combo = QComboBox()
+        self.ei_link_combo.setMinimumWidth(220)
+        self.ei_link_combo.currentIndexChanged.connect(self._on_ei_link_changed)
+        ei_row = QHBoxLayout()
+        ei_row.setSpacing(8)
+        ei_row.addWidget(self.op_export_insert)
+        ei_row.addWidget(QLabel(tr("sqlgen_tab.ei.db_link")))
+        ei_row.addWidget(self.ei_link_combo)
+        ei_row.addStretch()
+
         ll.addWidget(self.op_insert)
         ll.addWidget(self.op_delete)
+        ll.addLayout(ei_row)
         ll.addWidget(self.op_import)
         ll.addWidget(self.op_export)
 
@@ -173,6 +187,26 @@ class SqlGenTab(QWidget):
     def set_project(self, project_id: int) -> None:
         self._project_id = project_id
         self._refresh_tables()
+        self._refresh_db_links()
+
+    def _refresh_db_links(self) -> None:
+        """加载 db_links 列表到 combo(供 Export Insert SQL 选 link)"""
+        try:
+            links = reg().db_link_repo.list_all()
+        except Exception:
+            links = []
+        self.ei_link_combo.blockSignals(True)
+        self.ei_link_combo.clear()
+        self.ei_link_combo.addItem(tr("sqlgen_tab.ei.no_link"), None)
+        for link in links:
+            label = f"{link.name}  [{tr(f'db_link.type.{link.db_type}')}]"
+            self.ei_link_combo.addItem(label, link.id)
+        self.ei_link_combo.blockSignals(False)
+        self._on_ei_link_changed()
+
+    def _on_ei_link_changed(self) -> None:
+        """选 link 的回调用(预留:以后这里可以做一些上下文相关 UI 更新)"""
+        pass
 
     def _refresh_tables(self) -> None:
         if self._project_id is None:
@@ -241,6 +275,7 @@ class SqlGenTab(QWidget):
             self.op_delete.isChecked(),
             self.op_import.isChecked(),
             self.op_export.isChecked(),
+            self.op_export_insert.isChecked(),
         ]):
             QMessageBox.information(
                 self, tr("common.info"),
@@ -275,6 +310,31 @@ class SqlGenTab(QWidget):
                     with_columns=cfg["with_columns"],
                     with_header=cfg["with_header"],
                 ))
+            if self.op_export_insert.isChecked():
+                # Export Insert SQL(pg_dump / mysqldump / expdp 命令)
+                link_id = self.ei_link_combo.currentData()
+                if not link_id:
+                    lines.append(f"-- [{t.name}] ⚠ 跳过 Export Insert SQL:未选 db_link")
+                else:
+                    link = reg().db_link_repo.get(link_id)
+                    if link is None:
+                        lines.append(f"-- [{t.name}] ⚠ 跳过 Export Insert SQL:db_link(id={link_id}) 不存在")
+                    else:
+                        try:
+                            lines.append(generate_export_insert(
+                                table=t.name,
+                                db_type=link.db_type,
+                                host=link.host,
+                                port=link.port,
+                                username=link.username,
+                                password=link.password,
+                                database=link.database,
+                                schema=link.schema or "public",
+                                service_name=link.service_name,
+                                out_dir=cfg["directory"] or ".",
+                            ))
+                        except Exception as e:
+                            lines.append(f"-- [{t.name}] ⚠ Export Insert SQL 生成失败: {e}")
         # 直接 join,无任何注释、无空行
         self.sql_view.setPlainText("\n".join(lines))
         show_toast(

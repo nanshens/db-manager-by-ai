@@ -108,6 +108,23 @@ CREATE TABLE IF NOT EXISTS excel_template (
 -- 兼容老库: 如果 excel_template 已存在但没有新列,补加
 -- (用 try/except 包,IF NOT EXISTS SQLite 不支持 ALTER COLUMN)
 
+-- 数据库链接(管理 db 连接信息,用于生成 pg_dump/mysqldump/expdp 命令)
+CREATE TABLE IF NOT EXISTS db_link (
+  id             INTEGER PRIMARY KEY,
+  name           TEXT NOT NULL UNIQUE,
+  db_type        TEXT NOT NULL,        -- postgres / mysql / oracle
+  host           TEXT NOT NULL DEFAULT '',
+  port           INTEGER NOT NULL DEFAULT 0,
+  username       TEXT NOT NULL DEFAULT '',
+  password       TEXT NOT NULL DEFAULT '',   -- 明文存储(自用工具,本地 SQLite)
+  database       TEXT NOT NULL DEFAULT '',   -- pg: database, mysql: db name, oracle: 留空
+  schema         TEXT NOT NULL DEFAULT 'public',  -- pg/mysql schema, oracle: user/owner
+  service_name   TEXT NOT NULL DEFAULT '',   -- 仅 oracle 用(oracle service name / SID)
+  description    TEXT,
+  created_at     TEXT NOT NULL,
+  updated_at     TEXT NOT NULL
+);
+
 -- Schema 迁移 — 用单独的 init_db 调,这里只放 DDL
 
 

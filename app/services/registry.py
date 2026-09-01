@@ -13,6 +13,7 @@ from app.repos.sql_snippet_repo import SqlSnippetRepo
 from app.repos.compare_config_repo import CompareConfigRepo
 from app.repos.excel_template_repo import ExcelTemplateRepo
 from app.repos.diff_record_repo import DiffRecordRepo
+from app.repos.db_link_repo import DbLinkRepo
 from app.services.project_service import ProjectService
 from app.services.table_service import TableService
 from app.services.data_version_service import DataVersionService
@@ -47,6 +48,7 @@ class Registry:
         self.compare_config_repo = CompareConfigRepo(db_path)
         self.excel_template_repo = ExcelTemplateRepo(db_path)
         self.diff_record_repo = DiffRecordRepo(db_path)
+        self.db_link_repo = DbLinkRepo(db_path)
 
         # Services
         self.project_service = ProjectService(self.project_repo, self.table_repo)
