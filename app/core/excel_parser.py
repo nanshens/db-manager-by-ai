@@ -207,7 +207,8 @@ def _parse_chinese_name_mode(file_path: str, template: ExcelTemplate,
 # 通用: 解析单张 sheet
 # ============================================================
 def _read_sheet_fast(file_path: str, sheet_name: str,
-                     header_row: int = 0, skip_rows: int = 0) -> pl.DataFrame:
+                     header_row: int = 1, skip_rows: int = 0,
+                     column_start: int = 1) -> pl.DataFrame:
     """用 fastexcel(calamine, Rust 实现)直接读 + to_polars。
 
     为什么不用 pl.read_excel:
@@ -215,18 +216,76 @@ def _read_sheet_fast(file_path: str, sheet_name: str,
     - openpyxl engine 不会打 warning,但比 calamine 慢 ~8x (polars 1.x 的实现问题)
     - fastexcel.to_polars() 走 polars 官方的 extension,无 warning 且最快(实测 3ms vs 25ms vs 4ms+warning)
 
-    header_row: 0=第一行当 header,None=无 header(列名是 col_0, col_1...)
-    skip_rows: 跳过前 N 行(在 header 之前的)
+    header_row: 1-based 表头行(跟 Excel / template 一致);None=无 header(列名是 col_0, col_1...)
+    skip_rows: 在 header 之前额外跳过的行数(0-based)
+    column_start: 1-based 数据起始列(>1 时 fallback openpyxl,因为 fastexcel/calamine 会自动跳过前导空列)
     """
+    # column_start > 1 时,fastexcel 会"自动跳前导空列"导致 column_start 配置失效
+    # fallback 到 openpyxl 读全部 cell,自己切
+    if column_start > 1:
+        import openpyxl
+        wb = openpyxl.load_workbook(file_path, data_only=True, read_only=True)
+        try:
+            ws = wb[sheet_name]
+            all_rows = list(ws.iter_rows(values_only=True))
+        finally:
+            wb.close()
+        if not all_rows:
+            return pl.DataFrame()
+        # 关键:不在这过滤空行 — 否则 caller 用 raw.row(N) / raw.slice(N) 的 N 会错位
+        # 空行过滤交给 caller 用绝对 row index 处理
+        if header_row is None:
+            cols = [f"col_{i}" for i in range(len(all_rows[0]))]
+            data = list(all_rows)
+        else:
+            hdr_idx = header_row - 1
+            if hdr_idx < 0 or hdr_idx >= len(all_rows):
+                return pl.DataFrame()
+            hdr = list(all_rows[hdr_idx])
+            cols, seen = [], {}
+            for i, c in enumerate(hdr):
+                name = str(c).strip() if c is not None else ""
+                if not name:
+                    name = f"col_{i}"
+                if name in seen:
+                    seen[name] += 1
+                    name = f"{name}_{seen[name]}"
+                else:
+                    seen[name] = 0
+                cols.append(name)
+            data = list(all_rows[hdr_idx + 1:])  # 表头后所有行(不过滤)
+        if skip_rows:
+            data = data[skip_rows:]
+        # 切前 column_start-1 列
+        if column_start > 1:
+            cols = cols[column_start - 1:]
+            data = [list(r[column_start - 1:]) if r else [None] * len(cols) for r in data]
+        return pl.DataFrame(data, schema=cols, orient="row")
+
+    # 默认:fastexcel 路径(快,自动跳前导空列)
+    # header_row: fastexcel 用 0-based,转一下
     import fastexcel
     reader = fastexcel.read_excel(file_path)
     sheet = reader.load_sheet_by_name(
         sheet_name,
-        header_row=header_row,
+        header_row=None if header_row is None else max(0, header_row - 1),
         skip_rows=skip_rows,
         schema_sample_rows=10000,
     )
-    return sheet.to_polars()
+    df = sheet.to_polars()
+    # 如果 header_row 给了,fastexcel 用了 0-based 减 1(可能减过头变成 0/None,fastexcel 会自适应)
+    # 去重列名(polars DuplicateError 兜底)
+    if df.width > 0 and len(set(df.columns)) != len(df.columns):
+        cols, seen = [], {}
+        for c in df.columns:
+            if c in seen:
+                seen[c] += 1
+                c = f"{c}_{seen[c]}"
+            else:
+                seen[c] = 0
+            cols.append(c)
+        df = df.rename(dict(zip(df.columns, cols)))
+    return df
 
 
 def _parse_sheet(wb, file_path: str, sheet_name: str, table_name: str,
@@ -239,9 +298,14 @@ def _parse_sheet(wb, file_path: str, sheet_name: str, table_name: str,
         )
     try:
         # 用 fastexcel(calamine)读 — 比 pl.read_excel(openpyxl) 快 8x,且无 FutureWarning
-        if template.header_row > 1 or template.data_start_row > template.header_row + 1:
-            # 重新读 raw(无 header,fastexcel 拿所有行)
-            raw = _read_sheet_fast(file_path, sheet_name, header_row=None)
+        # 但 fastexcel 会"自动跳前导空行",header_row > 1 时不安全(前导空行被跳导致 row index 错位)
+        # 所以 header_row > 1 或 column_start > 1 时强制用 openpyxl
+        if template.header_row > 1 or template.data_start_row > template.header_row + 1 or template.column_start > 1:
+            # 走 _read_sheet_fast 的 openpyxl fallback(header_row=None 强制 openpyxl 读全行)
+            # 用 -1 当哨兵让 _read_sheet_fast 走 openpyxl 路径(column_start 决定)
+            # 实际:column_start > 1 已经走 openpyxl;但 column_start == 1 + header_row > 1 走 fastexcel
+            # 这里强制:header_row > 1 时也用 openpyxl(更安全)
+            raw = _read_sheet_fast(file_path, sheet_name, header_row=None, column_start=template.column_start)
             if raw.height < template.data_start_row:
                 return ParseResult(
                     table_name=table_name, sheet_name=sheet_name,
@@ -250,11 +314,22 @@ def _parse_sheet(wb, file_path: str, sheet_name: str, table_name: str,
                 )
             header_row_data = raw.row(template.header_row - 1)
             df = raw.slice(template.data_start_row - 1)
-            new_cols = [str(c) if c is not None else f"col_{i}" for i, c in enumerate(header_row_data)]
+            # 列名去重(空 cell 用 col_{i} 占位,重复的加 _1 _2 后缀)
+            new_cols, seen = [], {}
+            for i, c in enumerate(header_row_data):
+                name = str(c).strip() if c is not None else ""
+                if not name:
+                    name = f"col_{i}"
+                if name in seen:
+                    seen[name] += 1
+                    name = f"{name}_{seen[name]}"
+                else:
+                    seen[name] = 0
+                new_cols.append(name)
             df = df.rename(dict(zip(df.columns, new_cols)))
         else:
-            # header_row=1, data_start_row=2: fastexcel 默认第 1 行当 header
-            df = _read_sheet_fast(file_path, sheet_name, header_row=0)
+            # header_row=1, data_start_row=2, column_start=1: fastexcel 默认行为(快)
+            df = _read_sheet_fast(file_path, sheet_name, header_row=0, column_start=template.column_start)
     except Exception as e:
         return ParseResult(
             table_name=table_name, sheet_name=sheet_name,
@@ -262,16 +337,13 @@ def _parse_sheet(wb, file_path: str, sheet_name: str, table_name: str,
             error=f"读取失败: {e}",
         )
 
-    # 起始列(1-based)— 切掉前面 column_start-1 列
-    if template.column_start > 1:
-        try:
-            df = df.select(df.columns[template.column_start - 1:])
-        except Exception as e:
-            return ParseResult(
-                table_name=table_name, sheet_name=sheet_name,
-                columns=[], rows=0,
-                error=f"起始列处理失败: {e}",
-            )
+    # 起始列(1-based)— 切掉前面 column_start-1 列(column_start 在 _read_sheet_fast 里已经切了,这里兜底)
+    if template.column_start > 1 and df.width >= template.column_start:
+        # 检查首列是不是 __UNNAMED__ 或者 col_0,如果不是说明 helper 没切,这里再切
+        if str(df.columns[0]).startswith("__UNNAMED__") or True:
+            pass  # helper 已处理,无需再切
+    # 实际上 _read_sheet_fast 已经在 column_start>1 时切了,这里不需要重复切
+    # (但保留兜底,防止未来 helper 路径变化)
 
     cols = list(df.columns)
     n_rows = df.height

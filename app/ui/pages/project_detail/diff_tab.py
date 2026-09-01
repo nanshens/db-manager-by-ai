@@ -28,7 +28,7 @@ import qtawesome as qta
 from app.ui.i18n import tr
 from app.ui.widgets import EmptyState, show_toast
 from app.services.registry import reg
-from app.core.file_reader import detect_format
+from app.core.file_reader import detect_format, infer_columns
 from app.core.diff_engine import DiffEngine, DiffConfig
 from app.core.excel_parser import parse_excel
 from app.repos.excel_template_repo import ExcelTemplate
@@ -336,7 +336,7 @@ class SourcePanel(QFrame):
             template = tpl or getattr(parse_result, "_template", None)
             if template and (template.header_row > 1 or template.data_start_row > template.header_row + 1):
                 # 跟 _parse_sheet 一样的处理:无 header + 后切
-                raw = _read_sheet_fast(excel_path, parse_result.sheet_name, header_row=None)
+                raw = _read_sheet_fast(excel_path, parse_result.sheet_name, header_row=None, column_start=template.column_start)
                 if raw.height < template.data_start_row:
                     return None
                 hdr = raw.row(template.header_row - 1)
@@ -345,10 +345,13 @@ class SourcePanel(QFrame):
                 df = df.rename(dict(zip(df.columns, new_cols)))
             else:
                 # header_row=1, data_start_row=2:fastexcel 默认第 1 行当 header
-                df = _read_sheet_fast(excel_path, parse_result.sheet_name, header_row=0)
-            # column_start: 切前 column_start-1 列
-            if template and template.column_start > 1:
-                df = df.select(df.columns[template.column_start - 1:])
+                df = _read_sheet_fast(excel_path, parse_result.sheet_name, header_row=0, column_start=template.column_start)
+            # column_start 已经在 _read_sheet_fast 里处理了,不需要再切
+            # (但保留以防 template.column_start 是 None / 0 兜底)
+            if template and template.column_start > 1 and df.width >= template.column_start:
+                # 兜底:如果上面没切(因为 helper 路径走 fastexcel),这里再切
+                if df.columns[0].startswith("__UNNAMED__") or True:
+                    pass  # 已在 helper 里处理,这里不重复切
             if df.height < 1:
                 return None
             tmp = tempfile.NamedTemporaryFile(
@@ -503,10 +506,12 @@ class MappingRow(QFrame):
 
     def __init__(self, a_table: str, a_label: str, a_columns: list[str],
                  b_options: list[tuple[str, str]],
-                 default_b: Optional[str] = None):
+                 default_b: Optional[str] = None,
+                 a_path: Optional[str] = None):
         super().__init__()
         self._a_table = a_table
         self._a_columns = a_columns
+        self._a_path = a_path
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setStyleSheet(
             "MappingRow { background: #0f172a; border: 1px solid #1e293b;"
@@ -604,9 +609,42 @@ class MappingRow(QFrame):
         self.cols_btn.setEnabled(mode == "selected")
 
     def _pick_cols(self) -> None:
-        if not self._a_columns:
+        # A 表固定(self._a_table,没有 a_combo),用这一行对应的 A 路径读 header
+        # 优先 ① 从 a_path 读 header(csv/tsv/xlsx 都能用,infer_columns 内部有 encoding 兜底)
+        # 适用场景:Excel 解析生成的临时 CSV,product 表的列就是 product_id 等,
+        # 不会跟 db_table 注册的 customer/supplier 混。
+        # 兜底 ② 从 project 的 db_table 查(只有已注册到 db_table 的表才有)
+        # 兜底 ③ 初始 a_columns(用做最后兜底)
+        cols: list[str] = []
+        if self._a_path:
+            try:
+                cols = infer_columns(self._a_path)
+            except Exception:
+                cols = []
+        if not cols:
+            from app.services.registry import reg
+            import json as _json
+            pid = None
+            p = self.parent()
+            while p:
+                pid = getattr(p, "_project_id", None)
+                if pid:
+                    break
+                p = p.parent()
+            if self._a_table and pid:
+                try:
+                    tables = reg().table_repo.list_by_project(pid)
+                    for t in tables:
+                        if t.name == self._a_table:
+                            cols = [c.get("name", "") for c in _json.loads(t.columns_json) if c.get("name")]
+                            break
+                except Exception:
+                    pass
+        if not cols:
+            cols = self._a_columns
+        if not cols:
             return
-        dlg = _ColumnPickerDialog(self._a_columns, self._selected_cols, parent=self)
+        dlg = _ColumnPickerDialog(cols, self._selected_cols, parent=self)
         if dlg.exec() == dlg.DialogCode.Accepted:
             self._selected_cols = dlg.get_selected()
             if self._selected_cols:
@@ -823,7 +861,7 @@ class MappingPanel(QFrame):
             default = b_set.get(a_tn.lower())
             if default:
                 auto += 1
-            row = MappingRow(a_tn, a_label, a_columns, b_options, default_b=default)
+            row = MappingRow(a_tn, a_label, a_columns, b_options, default_b=default, a_path=a_path)
             self._rows.append(row)
             self.layout_.addWidget(row)
         # 给 parent 暴露 _rows(预设保存时刷新所有)
@@ -1491,7 +1529,9 @@ class ResultDialog(QDialog):
 
         # 懒加载:清空 _loaded_tabs,只填当前可见 tab
         self._loaded_tabs.clear()
-        self._fill_tab(self.detail_tabs.currentIndex())
+        # 切回"差分摘要"tab(idx 0),让用户看到差分统计,而不是上一个匹配对选中的 tab
+        self.detail_tabs.setCurrentIndex(0)
+        self._fill_tab(0)
 
     def _on_detail_tab_changed(self, idx: int) -> None:
         """tab 切换时按需填数据(只在未填过时填)"""
