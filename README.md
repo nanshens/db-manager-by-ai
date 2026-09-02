@@ -119,3 +119,9 @@ del %APPDATA%\DBManager\dbmanager.db
 
 - **v1.1.0** — DB 链接管理 + Export Insert SQL dump + 数据对比保留原始大小写 + 选列按对应表
 - **v1.0.0** — 完整功能版本(M0–M6 全部实现)
+
+
+
+待做功能
+1. 数据layout对比, 两方向的数据 layout是否有问题
+2. 生成sql的时候 选表有点麻烦
