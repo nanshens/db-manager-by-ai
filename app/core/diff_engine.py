@@ -31,15 +31,31 @@ class DiffConfig:
 
 def _read(path: str) -> pl.DataFrame:
     fmt = detect_format(path)
-    if fmt == "csv":
-        return pl.read_csv(path, infer_schema_length=10000, ignore_errors=True,
-                          encoding="utf8-lossy")
-    if fmt == "tsv":
-        return pl.read_csv(path, separator="\t", infer_schema_length=10000, ignore_errors=True,
-                          encoding="utf8-lossy")
-    if fmt in ("xlsx", "xls"):
-        return pl.read_excel(path)
-    raise ValueError(f"Unsupported format: {fmt}")
+    if fmt in ("csv", "tsv"):
+        # 关键:全部列强制 Utf8(不要让 polars 推断 schema 把 "01001" 推断成 int 1001,
+        # 否则前导 0 丢失,跨 csv/tsv 严格 hash 不匹配)
+        sep = "\t" if fmt == "tsv" else ","
+        # 先读 header 拿列名,再按列名读(全部 Utf8)
+        df_head = pl.read_csv(path, separator=sep, n_rows=0, encoding="utf8-lossy")
+        schema_overrides = {col: pl.Utf8 for col in df_head.columns}
+        df = pl.read_csv(
+            path, separator=sep, ignore_errors=True, encoding="utf8-lossy",
+            schema_overrides=schema_overrides,
+        )
+    elif fmt in ("xlsx", "xls"):
+        df = pl.read_excel(path)
+        # Excel 同样问题:数字前导 0 在 Excel 单元格格式是 number 时会丢
+        # 全部转 Utf8 与 csv/tsv 保持一致
+        cast_exprs = [
+            pl.col(col).cast(pl.Utf8).alias(col)
+            for col, dtype in df.schema.items()
+            if dtype != pl.Utf8
+        ]
+        if cast_exprs:
+            df = df.select(cast_exprs)
+    else:
+        raise ValueError(f"Unsupported format: {fmt}")
+    return df
 
 
 def _normalize_str_expr(col: str, case_sensitive: bool, trim: bool) -> pl.Expr:
