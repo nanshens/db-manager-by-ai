@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit, QListWidget, QListWidgetItem, QMessageBox, QWidget, QFileDialog,
     QProgressBar, QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
     QTabWidget, QSizePolicy, QMenu, QInputDialog, QDialog, QFormLayout,
-    QSplitter, QStyledItemDelegate,
+    QSplitter, QStyledItemDelegate, QScrollArea,
 )
 import qtawesome as qta
 
@@ -871,12 +871,18 @@ class MappingPanel(QFrame):
         self.hint.setWordWrap(True)
         v.addWidget(self.hint)
 
-        # 表对容器
+        # 表对容器(包 QScrollArea — 多行时可滚动,20+ 个表对不再挤一起)
         self.container = QWidget()
         self.layout_ = QVBoxLayout(self.container)
         self.layout_.setContentsMargins(0, 0, 0, 0)
         self.layout_.setSpacing(0)
-        v.addWidget(self.container, 1)
+        self.container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setWidget(self.container)
+        self.scroll.setFrameShape(QFrame.Shape.NoFrame)
+        v.addWidget(self.scroll, 1)
 
     def rebuild(self, a_tables: dict[str, tuple[str, str]],
                 b_tables: dict[str, tuple[str, str]]) -> None:
