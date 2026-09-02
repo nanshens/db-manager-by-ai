@@ -27,6 +27,8 @@ class TablesTab(QWidget):
         # 缓存
         self._all_tables: list[Table] = []
         self._table_tags_map: dict[int, list] = {}  # {table_id: [Tag, ...]}
+        # 跨 tab 通知 bus 只订阅一次(避免 showEvent 重复 disconnect 触发 PySide RuntimeWarning)
+        self._bus_connected: bool = False
         self._build()
         # 触发空态显示
         self.refresh()
@@ -211,12 +213,14 @@ class TablesTab(QWidget):
     def showEvent(self, event):
         # 跨 tab 同步:从其他 tab(SQL 生成器等)创建/修改 tag 后,切到本 tab 时自动 refresh
         super().showEvent(event)
-        # 订阅一次(避免重复订阅)
-        try:
-            reg().bus.tag_changed.disconnect(self._on_tag_changed_external)
-        except (TypeError, RuntimeError, Exception):
-            pass
-        reg().bus.tag_changed.connect(self._on_tag_changed_external)
+        # 只 connect 一次 — PySide 重复 disconnect 没连过的 slot 会 emit RuntimeWarning
+        # (C 端 warning,Python try/except 抓不到),所以用 flag 控制只连一次
+        if not self._bus_connected:
+            try:
+                reg().bus.tag_changed.connect(self._on_tag_changed_external)
+                self._bus_connected = True
+            except Exception:
+                pass
         if self._project_id is not None:
             self.refresh()
 
