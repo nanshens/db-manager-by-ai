@@ -1328,8 +1328,8 @@ class ResultDialog(QDialog):
         status.setObjectName("Card")
         st = QHBoxLayout(status)
         st.setContentsMargins(16, 12, 16, 12)
-        total_add = sum(len(r["result"]["only_right"]) for r in results)
-        total_del = sum(len(r["result"]["only_left"]) for r in results)
+        total_add = sum(len(r["result"]["only_left"]) for r in results)
+        total_del = sum(len(r["result"]["only_right"]) for r in results)
         total_unch = sum(r["result"]["unchanged_count"] for r in results)
         n_ok = len(results)
         n_err = len(errors)
@@ -1402,8 +1402,8 @@ class ResultDialog(QDialog):
             key = f"{m['a_table']} -> {m['b_table']}"
             self._results_by_key[key] = r
             res = r["result"]
-            n_add = len(res["only_right"])
-            n_del = len(res["only_left"])
+            n_add = len(res["only_left"])
+            n_del = len(res["only_right"])
             n_unch = res["unchanged_count"]
             # 完全无差异 → OK 绿色;有差异 → NG 红色
             from PySide6.QtGui import QColor
@@ -1527,8 +1527,8 @@ class ResultDialog(QDialog):
             elif right_rows:
                 common_cols = list(right_rows[0].keys())
 
-        n_add = len(res["only_right"])
-        n_del = len(res["only_left"])
+        n_add = len(res["only_left"])
+        n_del = len(res["only_right"])
         n_unch = res["unchanged_count"]
         # tab 标题带数字(按新顺序:差分摘要, 新增, 删除, 未变, A, B)
         a_label = m.get("a_source_label", m["a_table"])
@@ -1615,8 +1615,8 @@ class ResultDialog(QDialog):
         only_left_keys = set(tuple(d.get("key", ())) for d in res["only_left"])
         only_right_keys = set(tuple(d.get("key", ())) for d in res["only_right"])
         m = r["match"]
-        n_add = len(res["only_right"])
-        n_del = len(res["only_left"])
+        n_add = len(res["only_left"])
+        n_del = len(res["only_right"])
         n_unch = res["unchanged_count"]
 
         # tab 顺序:0=差分摘要, 1=新增, 2=删除, 3=未变, 4=A, 5=B
