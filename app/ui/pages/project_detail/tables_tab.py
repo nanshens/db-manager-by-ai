@@ -377,7 +377,7 @@ class TablesTab(QWidget):
             try:
                 new_tag = dlg.get_tag()
                 reg().tag_repo.update(new_tag)
-                reg().tag_repo.set_table_tags(new_tag.id, dlg.get_selected_table_ids())
+                reg().tag_repo.set_tag_tables(new_tag.id, dlg.get_selected_table_ids())
                 show_toast(
                     tr("toast.saved").format(name=new_tag.name), "success"
                 )
