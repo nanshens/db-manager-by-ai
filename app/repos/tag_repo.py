@@ -126,17 +126,14 @@ class TagRepo:
                 (tag_id, table_id),
             )
 
-    def set_tag_tables(self, tag_id: int, table_ids: list[int]) -> None:
-        """替换 tag 的所有 table 关联(编辑 tag 时用)
-        - 删 tag 现有的所有 table_tag
-        - 重新插入
-        """
+    def set_table_tags(self, table_id: int, tag_ids: list[int]) -> None:
+        """替换表的所有 tag(用于 TagDialog 的多选保存)"""
         with transaction(self.db_path) as conn:
-            conn.execute("DELETE FROM table_tag WHERE tag_id = ?", (tag_id,))
-            for tid in table_ids:
+            conn.execute("DELETE FROM table_tag WHERE table_id = ?", (table_id,))
+            for tid in tag_ids:
                 conn.execute(
                     "INSERT OR IGNORE INTO table_tag (tag_id, table_id, created_at) VALUES (?, ?, ?)",
-                    (tag_id, tid, _now()),
+                    (tid, table_id, _now()),
                 )
 
     def get_tags_for_table(self, table_id: int) -> list[Tag]:
