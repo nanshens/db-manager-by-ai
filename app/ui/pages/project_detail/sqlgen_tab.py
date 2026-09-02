@@ -44,6 +44,12 @@ class SqlGenTab(QWidget):
         super().__init__(parent)
         self._project_id: Optional[int] = None
         self._tables: list = []
+        # 过滤状态
+        self._search_kw: str = ""
+        self._tag_filter_id: Optional[int] = None
+        self._all_tables: list = []  # 缓存
+        # 跨过滤/搜索的持久化选集(用 table id 集合,跨搜索/标签保留)
+        self._selected_ids: set[int] = set()
         self._build()
 
     def _build(self):
@@ -79,10 +85,24 @@ class SqlGenTab(QWidget):
         tbl_hdr.addWidget(self.desel_all_btn)
         ll.addLayout(tbl_hdr)
 
+        # 搜索框 + 标签过滤
+        filter_row = QHBoxLayout()
+        filter_row.setSpacing(4)
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText(tr("sqlgen_tab.search.placeholder"))
+        self.search_edit.setClearButtonEnabled(True)
+        self.search_edit.textChanged.connect(self._on_search_changed)
+        filter_row.addWidget(self.search_edit, 1)
+        self.tag_combo = QComboBox()
+        self.tag_combo.setMinimumWidth(140)
+        self.tag_combo.currentIndexChanged.connect(self._on_tag_filter_changed)
+        filter_row.addWidget(self.tag_combo)
+        ll.addLayout(filter_row)
+
         # 表列表:MultiSelection 模式 → 点击切换(无 checkbox)
         self.table_list = QListWidget()
         self.table_list.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
-        self.table_list.itemSelectionChanged.connect(self._update_count)
+        self.table_list.itemSelectionChanged.connect(self._on_list_selection_changed)
         ll.addWidget(self.table_list, 1)
 
         # 操作复选框
@@ -158,6 +178,13 @@ class SqlGenTab(QWidget):
         self.output_label = QLabel(tr("sqlgen_tab.output"))
         h.addWidget(self.output_label)
         h.addStretch()
+        # 创建标签:用当前选中的表
+        create_tag_btn = QPushButton(tr("sqlgen_tab.create_tag"))
+        create_tag_btn.setObjectName("Ghost")
+        create_tag_btn.setIcon(qta.icon("mdi6.tag-plus-outline", color="#94a3b8"))
+        create_tag_btn.setToolTip(tr("sqlgen_tab.create_tag.tip"))
+        create_tag_btn.clicked.connect(self._on_create_tag_from_selection)
+        h.addWidget(create_tag_btn)
         copy_btn = QPushButton(tr("action.copy"))
         copy_btn.setObjectName("Ghost")
         copy_btn.setIcon(qta.icon("mdi6.content-copy", color="#94a3b8"))
@@ -211,16 +238,93 @@ class SqlGenTab(QWidget):
     def _refresh_tables(self) -> None:
         if self._project_id is None:
             return
-        self._tables = reg().table_service.list_by_project(self._project_id)
+        # 缓存全量表
+        self._all_tables = reg().table_service.list_by_project(self._project_id)
+        # 切 project 时重置过滤 + 选集(避免跨 project 残留)
+        self._search_kw = ""
+        if hasattr(self, "search_edit"):
+            self.search_edit.blockSignals(True)
+            self.search_edit.setText("")
+            self.search_edit.blockSignals(False)
+        self._tag_filter_id = None
+        self._selected_ids.clear()
+        # 刷新标签 combo
+        self._refresh_tag_combo()
+        # 渲染
+        self._render_table_list()
+
+    def _refresh_tag_combo(self) -> None:
+        """重新加载 tag combo(保留当前选中的 tag)"""
+        if not hasattr(self, "tag_combo"):
+            return
+        cur = self._tag_filter_id
+        self.tag_combo.blockSignals(True)
+        self.tag_combo.clear()
+        self.tag_combo.addItem(tr("sqlgen_tab.tag.all"), None)
+        if self._project_id is not None:
+            try:
+                tags = reg().tag_repo.list_by_project(self._project_id)
+            except Exception:
+                tags = []
+            for t in tags:
+                n = len(reg().tag_repo.get_table_ids_for_tag(t.id))
+                self.tag_combo.addItem(f"{t.name}  ({n})", t.id)
+        if cur is not None:
+            for i in range(self.tag_combo.count()):
+                if self.tag_combo.itemData(i) == cur:
+                    self.tag_combo.setCurrentIndex(i)
+                    break
+        self.tag_combo.blockSignals(False)
+
+    def _render_table_list(self) -> None:
+        """按 _search_kw + _tag_filter_id 过滤并渲染
+
+        选集跨过滤/搜索持久化:_selected_ids(set<int>)是唯一真理源,
+        即使某次过滤让表从视图消失,它的 id 还在 _selected_ids 里。
+        重新出现时(比如改回搜索关键字)自动 setSelected。
+        """
+        tables = self._all_tables
+        kw = self._search_kw.strip().lower()
+        tag_id = self._tag_filter_id
+
+        # 过滤
+        if tag_id is not None:
+            tags_map = reg().tag_repo.get_table_tags_map(self._project_id)
+        else:
+            tags_map = {}
+
+        filtered = []
+        for t in tables:
+            if kw and kw not in t.name.lower():
+                continue
+            if tag_id is not None:
+                tags = tags_map.get(t.id, [])
+                if not any(tag.id == tag_id for tag in tags):
+                    continue
+            filtered.append(t)
+        self._tables = filtered
+
         self.table_list.blockSignals(True)
         self.table_list.clear()
-        for t in self._tables:
-            self.table_list.addItem(_TableListItem(t))
+        for t in filtered:
+            item = _TableListItem(t)
+            self.table_list.addItem(item)
+        # 跨过滤/搜索持久化:_selected_ids 是真理源,视图重渲后按它恢复 setSelected
+        for i in range(self.table_list.count()):
+            it = self.table_list.item(i)
+            if it.table.id in self._selected_ids:
+                it.setSelected(True)
+        # 只清理"表被删"(在 _all_tables 里都没了)的 id — 不能清当前不可见的(搜索过滤)!
+        # 否则搜 "a" 选 a1, 搜 "b" 选 b1, 清空搜索 → a1 会被 &=visible_ids 误踢
+        all_ids = {t.id for t in self._all_tables}
+        self._selected_ids &= all_ids
         self.table_list.blockSignals(False)
         self._update_count()
 
     def retranslate(self) -> None:
         self.output_label.setText(tr("sqlgen_tab.output"))
+        if hasattr(self, "search_edit"):
+            self.search_edit.setPlaceholderText(tr("sqlgen_tab.search.placeholder"))
         self._update_count()
 
     def showEvent(self, event):
@@ -229,18 +333,100 @@ class SqlGenTab(QWidget):
 
     # ============== 槽 ==============
     def _on_select_all(self) -> None:
-        self.table_list.selectAll()
+        """全选:把当前可见的表都加进 _selected_ids(跨过滤不丢)"""
+        for i in range(self.table_list.count()):
+            self._selected_ids.add(self.table_list.item(i).table.id)
+        # 刷新选中状态
+        self.table_list.blockSignals(True)
+        for i in range(self.table_list.count()):
+            self.table_list.item(i).setSelected(True)
+        self.table_list.blockSignals(False)
+        self._update_count()
 
     def _on_deselect_all(self) -> None:
-        self.table_list.clearSelection()
+        """全不选:从 _selected_ids 移除当前可见表(不丢跨过滤的其它选中)"""
+        for i in range(self.table_list.count()):
+            self._selected_ids.discard(self.table_list.item(i).table.id)
+        self.table_list.blockSignals(True)
+        for i in range(self.table_list.count()):
+            self.table_list.item(i).setSelected(False)
+        self.table_list.blockSignals(False)
+        self._update_count()
+
+    def _on_list_selection_changed(self) -> None:
+        """用户在 list 里点选/取消勾:同步 _selected_ids(以 setSelected 反推 — 跨过滤持久化)"""
+        for i in range(self.table_list.count()):
+            item = self.table_list.item(i)
+            if item.isSelected():
+                self._selected_ids.add(item.table.id)
+            else:
+                self._selected_ids.discard(item.table.id)
+        self._update_count()
 
     def _update_count(self) -> None:
         total = self.table_list.count()
-        sel = len(self.table_list.selectedItems())
-        self.count_label.setText(f"({sel} / {total})")
+        # 选集总数用 _selected_ids(跨过滤 — 即使当前视图里看不到某张选中的表,也算)
+        n_sel_all = len(self._selected_ids)
+        if self._search_kw or self._tag_filter_id is not None:
+            self.count_label.setText(
+                tr("sqlgen_tab.count_filtered").format(
+                    sel=n_sel_all, shown=total, total=len(self._all_tables)
+                )
+            )
+        else:
+            self.count_label.setText(f"({n_sel_all} / {total})")
 
     def _selected_tables(self) -> list:
-        return [it.table for it in self.table_list.selectedItems()]
+        """返回当前选中的表(走持久化 _selected_ids,不只看当前视图)"""
+        id_to_table = {t.id: t for t in self._all_tables}
+        out = []
+        for tid in self._selected_ids:
+            if tid in id_to_table:
+                out.append(id_to_table[tid])
+        return out
+
+    # ============== 搜索 / 标签过滤 ==============
+    def _on_search_changed(self, text: str) -> None:
+        self._search_kw = text
+        self._render_table_list()
+
+    def _on_tag_filter_changed(self, _idx: int) -> None:
+        self._tag_filter_id = self.tag_combo.currentData()
+        self._render_table_list()
+
+    # ============== 创建标签(用当前选中的表)==============
+    def _on_create_tag_from_selection(self) -> None:
+        if self._project_id is None:
+            return
+        selected = self._selected_tables()
+        if not selected:
+            show_toast(tr("sqlgen_tab.create_tag.empty"), "warning")
+            return
+        from app.ui.dialogs import TagDialog
+        dlg = TagDialog(
+            self._project_id,
+            preselected_table_ids=[t.id for t in selected],
+            parent=self,
+        )
+        if dlg.exec() == dlg.DialogCode.Accepted:
+            tag = dlg.get_tag()
+            try:
+                tid = reg().tag_repo.create(tag)
+                for table_id in dlg.get_selected_table_ids():
+                    reg().tag_repo.add_table_to_tag(tid, table_id)
+                show_toast(
+                    tr("sqlgen_tab.create_tag.done").format(name=tag.name, n=len(selected)),
+                    "success",
+                )
+                # 刷新标签 combo(用户可能想立即用新 tag 过滤)
+                self._refresh_tag_combo()
+                # 通知其它 tab(表结构页)刷新 tag combo / 列表
+                try:
+                    reg().bus.tag_changed.emit()
+                except Exception:
+                    pass
+            except Exception as e:
+                QMessageBox.warning(self, tr("common.error"), str(e))
 
     def _io_config_kwargs(self) -> dict:
         return dict(

@@ -5,13 +5,13 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout, QVBoxLayout, QPushButton, QLabel, QFrame, QListWidget,
     QListWidgetItem, QSplitter, QTextEdit, QMessageBox, QSizePolicy,
-    QWidget,
+    QWidget, QLineEdit, QComboBox,
 )
 import qtawesome as qta
 
 from app.ui.i18n import tr
 from app.ui.widgets import EmptyState, show_toast, SqlHighlighter
-from app.ui.dialogs import TableDialog, ImportSqlDialog
+from app.ui.dialogs import TableDialog, ImportSqlDialog, TagDialog
 from app.services.registry import reg
 from app.repos.table_repo import Table, Column
 
@@ -21,6 +21,12 @@ class TablesTab(QWidget):
         super().__init__(parent)
         self._project_id: Optional[int] = None
         self._current_table: Optional[Table] = None
+        # 过滤状态
+        self._search_kw: str = ""           # 表名模糊搜索
+        self._tag_filter_id: Optional[int] = None  # 选中的标签 id;None = 全部
+        # 缓存
+        self._all_tables: list[Table] = []
+        self._table_tags_map: dict[int, list] = {}  # {table_id: [Tag, ...]}
         self._build()
         # 触发空态显示
         self.refresh()
@@ -79,6 +85,35 @@ class TablesTab(QWidget):
         ll = QVBoxLayout(left)
         ll.setContentsMargins(8, 8, 8, 8)
         ll.setSpacing(4)
+
+        # 搜索框(按表名模糊)
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText(tr("tables_tab.search.placeholder"))
+        self.search_edit.setClearButtonEnabled(True)
+        self.search_edit.textChanged.connect(self._on_search_changed)
+        ll.addWidget(self.search_edit)
+
+        # 标签 filter combo + 标签管理按钮
+        tag_row = QHBoxLayout()
+        tag_row.setSpacing(4)
+        self.tag_combo = QComboBox()
+        self.tag_combo.setMinimumWidth(0)
+        self.tag_combo.currentIndexChanged.connect(self._on_tag_filter_changed)
+        tag_row.addWidget(self.tag_combo, 1)
+        new_tag_btn = QPushButton()
+        new_tag_btn.setIcon(qta.icon("mdi6.tag-plus-outline", color="#94a3b8"))
+        new_tag_btn.setFixedSize(28, 28)
+        new_tag_btn.setToolTip(tr("tables_tab.tag.new"))
+        new_tag_btn.clicked.connect(self._on_new_tag)
+        tag_row.addWidget(new_tag_btn)
+        manage_tag_btn = QPushButton()
+        manage_tag_btn.setIcon(qta.icon("mdi6.tag-outline", color="#94a3b8"))
+        manage_tag_btn.setFixedSize(28, 28)
+        manage_tag_btn.setToolTip(tr("tables_tab.tag.manage"))
+        manage_tag_btn.clicked.connect(self._on_manage_tags)
+        tag_row.addWidget(manage_tag_btn)
+        ll.addLayout(tag_row)
+
         self.table_list = QListWidget()
         self.table_list.itemSelectionChanged.connect(self._on_selection)
         self.table_list.itemDoubleClicked.connect(lambda _: self._on_edit_current())
@@ -163,12 +198,33 @@ class TablesTab(QWidget):
         self.import_btn.setText(tr("action.import"))
         self.import_btn.setToolTip(tr("dlg.import_sql.title"))
         self.del_all_btn.setText(tr("tables_tab.delete_all"))
+        if self._search_kw:
+            pass  # search edit 的 placeholder 已固定
+        self.search_edit.setPlaceholderText(tr("tables_tab.search.placeholder"))
         if self._current_table:
             self._show_detail(self._current_table)
         else:
             self.empty.title_label.setText(tr("tables_tab.empty.title"))
             self.empty.desc_label.setText(tr("tables_tab.empty.desc"))
         self.ddl_label.setText(tr("tables_tab.ddl"))
+
+    def showEvent(self, event):
+        # 跨 tab 同步:从其他 tab(SQL 生成器等)创建/修改 tag 后,切到本 tab 时自动 refresh
+        super().showEvent(event)
+        # 订阅一次(避免重复订阅)
+        try:
+            reg().bus.tag_changed.disconnect(self._on_tag_changed_external)
+        except (TypeError, RuntimeError, Exception):
+            pass
+        reg().bus.tag_changed.connect(self._on_tag_changed_external)
+        if self._project_id is not None:
+            self.refresh()
+
+    def _on_tag_changed_external(self) -> None:
+        """SQL 生成器(或别处)改了 tag,刷新本 tab 列表 / tag combo"""
+        if self._project_id is None:
+            return
+        self.refresh()
 
     def set_project(self, project_id: int) -> None:
         self._project_id = project_id
@@ -177,12 +233,61 @@ class TablesTab(QWidget):
     def refresh(self) -> None:
         if self._project_id is None:
             return
+        # 缓存全量数据
+        self._all_tables = reg().table_service.list_by_project(self._project_id)
+        self._table_tags_map = reg().tag_repo.get_table_tags_map(self._project_id)
+        # 刷新标签 combo
+        self._refresh_tag_combo()
+        # 渲染(走过滤逻辑)
+        self._render_table_list()
+
+    def _refresh_tag_combo(self) -> None:
+        """重新加载 tag combo(保留当前选中的 tag)"""
+        self.tag_combo.blockSignals(True)
+        cur = self._tag_filter_id
+        self.tag_combo.clear()
+        self.tag_combo.addItem(tr("tables_tab.tag.all"), None)
+        for t in reg().tag_repo.list_by_project(self._project_id):
+            n = len(reg().tag_repo.get_table_ids_for_tag(t.id))
+            self.tag_combo.addItem(f"{t.name}  ({n})", t.id)
+        # 恢复选中
+        if cur is not None:
+            for i in range(self.tag_combo.count()):
+                if self.tag_combo.itemData(i) == cur:
+                    self.tag_combo.setCurrentIndex(i)
+                    break
+        self.tag_combo.blockSignals(False)
+
+    def _render_table_list(self) -> None:
+        """按当前 _search_kw + _tag_filter_id 过滤,渲染 table_list"""
         self.table_list.clear()
-        tables = reg().table_service.list_by_project(self._project_id)
+        tables = self._all_tables
+        kw = self._search_kw.strip().lower()
+        tag_id = self._tag_filter_id
+
+        # 过滤
+        filtered = []
+        for t in tables:
+            if kw and kw not in t.name.lower():
+                continue
+            if tag_id is not None:
+                # 只保留带这个 tag 的表
+                tags = self._table_tags_map.get(t.id, [])
+                if not any(tag.id == tag_id for tag in tags):
+                    continue
+            filtered.append(t)
+
         # 更新计数
-        n = len(tables)
-        self.count_label.setText(tr("tables_tab.total_count").format(n=n))
-        if not tables:
+        n_total = len(tables)
+        n_show = len(filtered)
+        if kw or tag_id is not None:
+            self.count_label.setText(
+                tr("tables_tab.total_count_filtered").format(n=n_show, total=n_total)
+            )
+        else:
+            self.count_label.setText(tr("tables_tab.total_count").format(n=n_total))
+
+        if n_total == 0:
             self.empty.show()
             self.detail_header.hide()
             self.detail_comment.hide()
@@ -190,13 +295,95 @@ class TablesTab(QWidget):
             self.ddl_label.hide()
             return
         self.empty.hide()
-        for t in tables:
-            item = QListWidgetItem(f"📄 {t.name}  ({len(t.columns)})")
+        if n_show == 0:
+            # 有表但被过滤完了 — 给个"无匹配"提示
+            self.detail_header.hide()
+            self.detail_comment.hide()
+            self.ddl_view.hide()
+            self.ddl_label.hide()
+            self.empty.show()
+            self.empty.title_label.setText(tr("tables_tab.empty.filtered.title"))
+            self.empty.desc_label.setText(tr("tables_tab.empty.filtered.desc"))
+            return
+
+        for t in filtered:
+            tags = self._table_tags_map.get(t.id, [])
+            tag_str = ""
+            if tags:
+                tag_str = "  ".join(f"🏷{tg.name}" for tg in tags[:3])
+                if len(tags) > 3:
+                    tag_str += f"  +{len(tags) - 3}"
+            label = f"📄 {t.name}  ({len(t.columns)})"
+            if tag_str:
+                label += f"\n    {tag_str}"
+            item = QListWidgetItem(label)
             item.setData(Qt.ItemDataRole.UserRole, t.id)
+            # tooltip 显示完整 tag 列表
+            if tags:
+                item.setToolTip("标签: " + ", ".join(tg.name for tg in tags))
             self.table_list.addItem(item)
         # 默认选第一个
         if self.table_list.count() > 0:
             self.table_list.setCurrentRow(0)
+
+    # ============== 搜索 / 标签过滤 ==============
+    def _on_search_changed(self, text: str) -> None:
+        self._search_kw = text
+        self._render_table_list()
+
+    def _on_tag_filter_changed(self, _idx: int) -> None:
+        self._tag_filter_id = self.tag_combo.currentData()
+        self._render_table_list()
+
+    # ============== 标签管理 ==============
+    def _on_new_tag(self) -> None:
+        if self._project_id is None:
+            return
+        dlg = TagDialog(self._project_id, parent=self)
+        if dlg.exec() == dlg.DialogCode.Accepted:
+            tag = dlg.get_tag()
+            try:
+                tid = reg().tag_repo.create(tag)
+                # 关联选中的表
+                for table_id in dlg.get_selected_table_ids():
+                    reg().tag_repo.add_table_to_tag(tid, table_id)
+                show_toast(
+                    tr("toast.saved").format(name=tag.name), "success"
+                )
+                self.refresh()
+            except Exception as e:
+                QMessageBox.warning(self, tr("common.error"), str(e))
+
+    def _on_manage_tags(self) -> None:
+        if self._project_id is None:
+            return
+        # 简单版:弹个菜单选 edit / delete
+        from PySide6.QtWidgets import QMenu
+        tags = reg().tag_repo.list_by_project(self._project_id)
+        if not tags:
+            show_toast(tr("tables_tab.tag.no_tags"), "info")
+            return
+        menu = QMenu(self)
+        for t in tags:
+            n = len(reg().tag_repo.get_table_ids_for_tag(t.id))
+            act = menu.addAction(f"🏷 {t.name}  ({n})")
+            # 用 lambda 捕获 t 的 id
+            act.triggered.connect(lambda _checked=False, tag=t: self._open_tag_for_edit(tag))
+        menu.exec(self.cursor().pos())
+
+    def _open_tag_for_edit(self, tag) -> None:
+        dlg = TagDialog(self._project_id, tag=tag, parent=self)
+        if dlg.exec() == dlg.DialogCode.Accepted:
+            try:
+                new_tag = dlg.get_tag()
+                reg().tag_repo.update(new_tag)
+                reg().tag_repo.set_tag_tables(new_tag.id, dlg.get_selected_table_ids())
+                show_toast(
+                    tr("toast.saved").format(name=new_tag.name), "success"
+                )
+                self.refresh()
+            except Exception as e:
+                QMessageBox.warning(self, tr("common.error"), str(e))
 
     def _on_selection(self) -> None:
         items = self.table_list.selectedItems()
