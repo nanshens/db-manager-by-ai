@@ -125,6 +125,28 @@ CREATE TABLE IF NOT EXISTS db_link (
   updated_at     TEXT NOT NULL
 );
 
+-- 表标签(多对多,一张表可打多个标签,一个标签可含多张表)
+-- 用 project 作用域:同名 tag 在不同 project 是不同的(避免冲突)
+CREATE TABLE IF NOT EXISTS tag (
+  id           INTEGER PRIMARY KEY,
+  project_id   INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+  name         TEXT NOT NULL,
+  color        TEXT NOT NULL DEFAULT '#64748b',  -- 标签颜色(可选)
+  description  TEXT,
+  created_at   TEXT NOT NULL,
+  updated_at   TEXT NOT NULL,
+  UNIQUE(project_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS table_tag (
+  tag_id     INTEGER NOT NULL REFERENCES tag(id) ON DELETE CASCADE,
+  table_id   INTEGER NOT NULL REFERENCES db_table(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (tag_id, table_id)
+);
+CREATE INDEX IF NOT EXISTS idx_table_tag_table ON table_tag(table_id);
+CREATE INDEX IF NOT EXISTS idx_table_tag_tag ON table_tag(tag_id);
+
 -- Schema 迁移 — 用单独的 init_db 调,这里只放 DDL
 
 
@@ -165,6 +187,7 @@ CREATE INDEX IF NOT EXISTS idx_data_version_project ON data_version(project_id);
 CREATE INDEX IF NOT EXISTS idx_sql_snippet_project ON sql_snippet(project_id);
 CREATE INDEX IF NOT EXISTS idx_compare_config_project_table ON compare_config(project_id, table_name);
 CREATE INDEX IF NOT EXISTS idx_excel_template_project ON excel_template(project_id);
+CREATE INDEX IF NOT EXISTS idx_tag_project ON tag(project_id);
 """
 
 

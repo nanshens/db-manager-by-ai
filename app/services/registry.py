@@ -14,6 +14,7 @@ from app.repos.compare_config_repo import CompareConfigRepo
 from app.repos.excel_template_repo import ExcelTemplateRepo
 from app.repos.diff_record_repo import DiffRecordRepo
 from app.repos.db_link_repo import DbLinkRepo
+from app.repos.tag_repo import TagRepo
 from app.services.project_service import ProjectService
 from app.services.table_service import TableService
 from app.services.data_version_service import DataVersionService
@@ -27,6 +28,7 @@ class _EventBus(QObject):
     """全局事件总线 — 用于跨 tab 通知(如版本变化时刷新 diff 页面)"""
     data_version_changed = Signal()  # 数据版本列表变了(创建/删除)
     table_changed = Signal()         # 表列表变了(创建/删除/字段改动)
+    tag_changed = Signal()           # 标签变了(创建/重命名/删除/表关联变了)
 
 
 class Registry:
@@ -49,6 +51,7 @@ class Registry:
         self.excel_template_repo = ExcelTemplateRepo(db_path)
         self.diff_record_repo = DiffRecordRepo(db_path)
         self.db_link_repo = DbLinkRepo(db_path)
+        self.tag_repo = TagRepo(db_path)
 
         # Services
         self.project_service = ProjectService(self.project_repo, self.table_repo)
