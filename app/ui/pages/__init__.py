@@ -7,6 +7,7 @@ from .settings_page import SettingsPage
 from .project_detail_page import ProjectDetailPage
 from .file_convert_page import FileConvertPage
 from .db_links_page import DbLinksPage
+from .excel_parse_page import ExcelParsePage
 
 __all__ = [
     "BasePage",
@@ -16,4 +17,5 @@ __all__ = [
     "ProjectDetailPage",
     "FileConvertPage",
     "DbLinksPage",
+    "ExcelParsePage",
 ]

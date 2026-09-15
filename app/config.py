@@ -41,6 +41,22 @@ def set_sidebar(state: str) -> None:
     settings().setValue("ui/sidebar", state)
 
 
+# ===== Lite 模式(打包定制:只显示部分 tab)=====
+# 打包精简版时:把下面的 _LITE_MODE 改成 True,然后只编译 LITE_NAV_ITEMS 列出的 page_id
+# 开发/全功能版:保持 _LITE_MODE = False
+_LITE_MODE = True
+
+# Lite 模式下 sidebar 显示哪些 tab(只保留 page_id 在这个列表里的)
+LITE_NAV_ITEMS = [
+    "excel_tpl",       # PageId.EXCEL_TPL
+    "excel_parse",     # PageId.EXCEL_PARSE
+]
+
+
+def is_lite_mode() -> bool:
+    return _LITE_MODE
+
+
 # ===== 数据对比判别条件(用户偏好) =====
 
 def get_diff_match_mode() -> str:

@@ -31,6 +31,9 @@ class ParseResult:
     rows: int
     error: str = ""        # 空 = 成功
     sample_rows: list[list] = None  # 前 10 行
+    # 完整数据(DataFrame),供 Excel 解析页的预览/导出 csv/tsv 用
+    # 解析失败时为 None
+    df: Optional["pl.DataFrame"] = None
 
 
 def parse_excel(file_path: str, template: ExcelTemplate,
@@ -353,4 +356,5 @@ def _parse_sheet(wb, file_path: str, sheet_name: str, table_name: str,
     return ParseResult(
         table_name=table_name, sheet_name=sheet_name,
         columns=cols, rows=n_rows, sample_rows=sample,
+        df=df,  # 完整数据,供预览/导出用
     )

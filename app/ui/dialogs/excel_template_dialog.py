@@ -48,6 +48,7 @@ class ExcelTemplateDialog(QDialog):
                  file_path: str = "",
                  project_id: Optional[int] = None,
                  project_tables: Optional[list[str]] = None,
+                 lock_file: bool = False,
                  parent=None):
         super().__init__(parent)
         self._template = template
@@ -56,6 +57,7 @@ class ExcelTemplateDialog(QDialog):
         self._project_tables = project_tables or []
         self._sheet_names: list[str] = []
         self._config_cols_count: int = 0  # config sheet 的列数(决定字母下拉范围)
+        self._lock_file = lock_file
         self.setWindowTitle(tr("dlg.excel.new") if template is None else tr("dlg.excel.edit"))
         self.setMinimumWidth(720)
         self.resize(820, 720)
@@ -63,6 +65,11 @@ class ExcelTemplateDialog(QDialog):
         if self._file_path:
             self._load_sheet_names()
             self._restore_template_state()
+        # 如果锁定文件路径 → 输入框只读、浏览/刷新按钮 disabled
+        if self._lock_file and self._file_path:
+            self.path_edit.setReadOnly(True)
+            self._browse_btn.setEnabled(False)
+            self._reload_btn.setEnabled(False)
 
     def _build(self, projects):
         layout = QVBoxLayout(self)
@@ -113,14 +120,14 @@ class ExcelTemplateDialog(QDialog):
         self.path_edit.setText(self._file_path)
         self.path_edit.setPlaceholderText("选 xlsx → 加载 sheet 列表")
         file_row.addWidget(self.path_edit, 1)
-        browse_btn = QPushButton("浏览")
-        browse_btn.setObjectName("Ghost")
-        browse_btn.clicked.connect(self._on_browse_file)
-        file_row.addWidget(browse_btn)
-        reload_btn = QPushButton("刷新 sheet")
-        reload_btn.setObjectName("Ghost")
-        reload_btn.clicked.connect(self._reload_sheet_names)
-        file_row.addWidget(reload_btn)
+        self._browse_btn = QPushButton("浏览")
+        self._browse_btn.setObjectName("Ghost")
+        self._browse_btn.clicked.connect(self._on_browse_file)
+        file_row.addWidget(self._browse_btn)
+        self._reload_btn = QPushButton("刷新 sheet")
+        self._reload_btn.setObjectName("Ghost")
+        self._reload_btn.clicked.connect(self._reload_sheet_names)
+        file_row.addWidget(self._reload_btn)
         form.addRow("Excel 文件", self._wrap(file_row))
 
         layout.addLayout(form)

@@ -52,6 +52,11 @@ SK_EXCEL = "excel"
 # 跟 DiffResult 里 only_left/only_right 的 key 严格一致。
 # ============================================================
 
+# 预览/单文件视图最大显示行数(防止 100w+ 行 QTableWidget 内存爆 / 卡 UI)
+MAX_PREVIEW_ROWS = 5000
+# 写文件时 batch 大小 — 每写入这么多行 flush 一次,避免一次性序列化全量到 string
+WRITE_BATCH_SIZE = 10_000
+
 def _cell_key_value(val, case_sensitive: bool, trim: bool):
     """单 cell 归一化 — 跟 diff_engine._normalize 行为一致(纯 Python 版,无 polars 依赖)。
 
@@ -314,6 +319,7 @@ class SourcePanel(QFrame):
                 projects=reg().project_service.list_all(),
                 project_id=pid,
                 project_tables=project_tables,
+                lock_file=True,  # 已选文件 → 锁定路径,不让在 dialog 里改
                 parent=self,
             )
             if tpl_dlg.exec() != int(QDialog.DialogCode.Accepted):
@@ -1129,9 +1135,18 @@ class ExportSqlDialog(QDialog):
         if not path:
             return
         try:
+            # 分批写:每 1w 行 flush 一次,大 SQL 文件(100w 行)不一次性序列化
+            n_written = 0
             with open(path, "w", encoding="utf-8") as f:
-                f.write(text)
-            show_toast(f"已导出到 {path}", "success")
+                for idx, line in enumerate(text.splitlines(keepends=True)):
+                    f.write(line)
+                    n_written += 1
+                    if n_written % WRITE_BATCH_SIZE == 0:
+                        f.flush()
+            QMessageBox.information(
+                self, "导出完成",
+                f"已导出 {n_written:,} 条到:\n{path}"
+            )
         except Exception as e:
             QMessageBox.warning(self, "错误", str(e))
 
@@ -1256,10 +1271,13 @@ class ExportCsvDialog(QDialog):
         if not path:
             return
         try:
+            # 分批写:每 1w 行 flush 一次,避免一次性序列化全量到 string
+            # 100w 行 csv 大约 100MB string,一次性 f.write(text) 内存爆
+            n_written = 0
             with open(path, "w", encoding="utf-8", newline="") as f:
                 if self._common_cols:
                     f.write(sep.join(self._common_cols) + "\n")
-                for r in rows:
+                for idx, r in enumerate(rows):
                     cells = []
                     for c in self._common_cols:
                         v = r.get(c, "")
@@ -1273,7 +1291,13 @@ class ExportCsvDialog(QDialog):
                             else:
                                 cells.append(s)
                     f.write(sep.join(cells) + "\n")
-            show_toast(f"已导出 {len(rows)} 条到 {path}", "success")
+                    n_written += 1
+                    if n_written % WRITE_BATCH_SIZE == 0:
+                        f.flush()  # 大文件防 IO 堆积
+            QMessageBox.information(
+                self, "导出完成",
+                f"已导出 {n_written:,} 条到:\n{path}"
+            )
         except Exception as e:
             QMessageBox.warning(self, "错误", str(e))
 
@@ -1709,7 +1733,7 @@ class ResultDialog(QDialog):
             key = _row_key(row, cmp_cols, case_sensitive, trim_ws)
             if key in diff_keys:
                 rows_to_show.append((original_idx, row))
-        rows_to_show = rows_to_show[:1000]
+        rows_to_show = rows_to_show
         table.clear()
         table.setColumnCount(len(common_cols))
         table.setHorizontalHeaderLabels(list(common_cols))
@@ -1809,7 +1833,7 @@ class ResultDialog(QDialog):
             left_dict[_row_key(lr, cmp_cols, case_sensitive, trim_ws)] = lr
         right_keys = set(_row_key(rr, cmp_cols, case_sensitive, trim_ws) for rr in right_rows)
         # 公共 key(在两边都存在)
-        common_keys = [k for k in left_dict if k in right_keys][:1000]
+        common_keys = [k for k in left_dict if k in right_keys]
         table.clear()
         table.setColumnCount(len(common_cols))
         table.setHorizontalHeaderLabels(list(common_cols))

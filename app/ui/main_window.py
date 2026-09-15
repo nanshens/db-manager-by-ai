@@ -15,7 +15,7 @@ from app import __app_name__, __version__
 from app.ui import i18n
 from app.ui.pages import (
     ProjectsPage, SqlLibPage, ExcelTemplatesPage, SettingsPage, FileConvertPage,
-    DbLinksPage,
+    DbLinksPage, ExcelParsePage,
 )
 from app.ui.pages.project_detail_page import ProjectDetailPage
 from app.ui.widgets import show_toast
@@ -27,20 +27,32 @@ class PageId(str, Enum):
     PROJECTS = "projects"
     SQLLIB = "sqllib"
     EXCEL_TPL = "excel_tpl"
+    EXCEL_PARSE = "excel_parse"
     FILE_CONVERT = "file_convert"
     DB_LINKS = "db_links"
     PROJECT_DETAIL = "project_detail"
     SETTINGS = "settings"
 
 
-# 侧边栏导航项配置
+# 侧边栏导航项配置(全功能模式)
 NAV_ITEMS = [
     (PageId.PROJECTS, "mdi6.folder-multiple", "nav.projects"),
     (PageId.SQLLIB, "mdi6.database", "nav.sqllib"),
     (PageId.EXCEL_TPL, "mdi6.microsoft-excel", "nav.excel_templates"),
+    (PageId.EXCEL_PARSE, "mdi6.file-table-box-multiple-outline", "nav.excel_parse"),
     (PageId.FILE_CONVERT, "mdi6.file-replace-outline", "nav.file_convert"),
     (PageId.DB_LINKS, "mdi6.database-cog-outline", "nav.db_links"),
 ]
+
+
+def get_active_nav_items() -> list:
+    """根据 lite 模式返回当前要显示的 nav 项(lite 模式只显示子集)"""
+    import app.config as app_config
+    if not app_config.is_lite_mode():
+        return list(NAV_ITEMS)
+    # lite 模式:只显示指定 page_id
+    allowed = set(app_config.LITE_NAV_ITEMS)
+    return [item for item in NAV_ITEMS if item[0].value in allowed]
 
 EXPANDED_WIDTH = 220
 COLLAPSED_WIDTH = 56
@@ -135,7 +147,7 @@ class MainWindow(QMainWindow):
         self.nav_group.setExclusive(True)
         self.nav_buttons: dict[PageId, NavButton] = {}
 
-        for page_id, icon_name, text_key in NAV_ITEMS:
+        for page_id, icon_name, text_key in get_active_nav_items():
             btn = NavButton(page_id, icon_name, text_key)
             btn.clicked.connect(lambda _checked, pid=page_id: self._switch_page(pid))
             self.nav_group.addButton(btn)
@@ -171,6 +183,7 @@ class MainWindow(QMainWindow):
         self.projects_page.open_project_clicked.connect(self._open_project)
         self.sqllib_page = SqlLibPage()
         self.excel_tpl_page = ExcelTemplatesPage()
+        self.excel_parse_page = ExcelParsePage()
         self.file_convert_page = FileConvertPage()
         self.db_links_page = DbLinksPage()
         self.project_detail_page = ProjectDetailPage()
@@ -183,24 +196,26 @@ class MainWindow(QMainWindow):
         self.settings_page.theme_changed.connect(self._on_theme_change_requested)
         self.settings_page.language_changed.connect(self._on_language_change_requested)
 
-        # 顺序:projects, sqllib, excel_tpl, file_convert, db_links, project_detail, settings
+        # 顺序:projects, sqllib, excel_tpl, excel_parse, file_convert, db_links, project_detail, settings
         self.stack.addWidget(self.projects_page)           # 0
         self.stack.addWidget(self.sqllib_page)             # 1
         self.stack.addWidget(self.excel_tpl_page)          # 2
-        self.stack.addWidget(self.file_convert_page)       # 3
-        self.stack.addWidget(self.db_links_page)           # 4
-        self.stack.addWidget(self.project_detail_page)     # 5
-        self.stack.addWidget(self.settings_page)           # 6
+        self.stack.addWidget(self.excel_parse_page)        # 3
+        self.stack.addWidget(self.file_convert_page)       # 4
+        self.stack.addWidget(self.db_links_page)           # 5
+        self.stack.addWidget(self.project_detail_page)     # 6
+        self.stack.addWidget(self.settings_page)           # 7
 
         # 保存 page_id → index 映射
         self._page_index = {
             PageId.PROJECTS: 0,
             PageId.SQLLIB: 1,
             PageId.EXCEL_TPL: 2,
-            PageId.FILE_CONVERT: 3,
-            PageId.DB_LINKS: 4,
-            PageId.PROJECT_DETAIL: 5,
-            PageId.SETTINGS: 6,
+            PageId.EXCEL_PARSE: 3,
+            PageId.FILE_CONVERT: 4,
+            PageId.DB_LINKS: 5,
+            PageId.PROJECT_DETAIL: 6,
+            PageId.SETTINGS: 7,
         }
 
         rl.addWidget(self.stack, 1)
@@ -215,9 +230,10 @@ class MainWindow(QMainWindow):
             ("Ctrl+1", PageId.PROJECTS),
             ("Ctrl+2", PageId.SQLLIB),
             ("Ctrl+3", PageId.EXCEL_TPL),
-            ("Ctrl+4", PageId.FILE_CONVERT),
-            ("Ctrl+5", PageId.DB_LINKS),
-            ("Ctrl+6", PageId.SETTINGS),
+            ("Ctrl+4", PageId.EXCEL_PARSE),
+            ("Ctrl+5", PageId.FILE_CONVERT),
+            ("Ctrl+6", PageId.DB_LINKS),
+            ("Ctrl+7", PageId.SETTINGS),
         ]
         for seq, pid in page_map:
             QShortcut(QKeySequence(seq), self, activated=lambda p=pid: self._switch_page(p))
@@ -315,7 +331,8 @@ class MainWindow(QMainWindow):
             for btn in self.nav_buttons.values():
                 btn.set_collapsed(True)
         for page in [self.projects_page, self.sqllib_page,
-                     self.excel_tpl_page, self.file_convert_page,
+                     self.excel_tpl_page, self.excel_parse_page,
+                     self.file_convert_page, self.db_links_page,
                      self.project_detail_page, self.settings_page]:
             if hasattr(page, "retranslate"):
                 page.retranslate()
