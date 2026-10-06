@@ -532,5 +532,20 @@
   "dlg.import_sql.preview_title": "DDL Preview",
   "dlg.import_sql.no_target_selected": "Pick a target table for every DDL row",
   "dlg.import_sql.fk_done": "Wrote FK DDL into {n} table(s)",
-  "dlg.import_sql.index_done": "Wrote INDEX DDL into {n} table(s)"
+  "dlg.import_sql.index_done": "Wrote INDEX DDL into {n} table(s)",
+  "diff.mapping.save_all": "Save all presets (overwrites {table}_default)",
+  "diff.mapping.save_all.name": "Base name (each row stored as {base}_{table}):",
+  "diff.mapping.save_all.empty": "No mapping rows to save",
+  "diff.mapping.save_all.ok": "Saved {n} row presets (each table _default)",
+  "diff.mapping.load_all": "Load all presets",
+  "diff.mapping.load_all.name": "Base name (reads {base}_{table}):",
+  "diff.mapping.load_all.empty": "No mapping rows",
+  "diff.mapping.load_all.no_presets": "No presets have been saved yet",
+  "diff.mapping.load_all.ok": "Loaded {n} row presets",
+  "diff.mapping.load_all.none": "No _default presets available",
+  "diff.mapping.clear_all": "Reset all to defaults",
+  "diff.mapping.clear_all.confirm": "Reset every row's match condition to defaults (mode=all cols / case-sensitive / no trim). Continue?",
+  "diff.mapping.clear_all.empty": "No mapping rows",
+  "diff.mapping.clear_all.ok": "Reset {n} rows to defaults",
+  "diff.mapping.load_all.miss_suffix": "(skipped {miss} rows with no saved preset)"
 }

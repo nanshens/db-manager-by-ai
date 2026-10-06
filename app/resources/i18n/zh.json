@@ -532,5 +532,20 @@
   "dlg.import_sql.preview_title": "DDL 预览",
   "dlg.import_sql.no_target_selected": "请为每条 DDL 至少选一个目标表",
   "dlg.import_sql.fk_done": "已写入外键 DDL 到 {n} 张表",
-  "dlg.import_sql.index_done": "已写入 INDEX DDL 到 {n} 张表"
+  "dlg.import_sql.index_done": "已写入 INDEX DDL 到 {n} 张表",
+  "diff.mapping.save_all": "保存所有预设(覆盖各表的 _default)",
+  "diff.mapping.save_all.name": "基础名(每行存为 {base}_{表名}):",
+  "diff.mapping.save_all.empty": "当前没有表匹配行,无可保存",
+  "diff.mapping.save_all.ok": "已保存 {n} 行预设(各表 _default)",
+  "diff.mapping.load_all": "加载所有预设",
+  "diff.mapping.load_all.name": "基础名(读取 {base}_{表名}):",
+  "diff.mapping.load_all.empty": "当前没有表匹配行",
+  "diff.mapping.load_all.no_presets": "尚未保存过任何预设",
+  "diff.mapping.load_all.ok": "已加载 {n} 行预设",
+  "diff.mapping.load_all.none": "没有任何 _default 预设可加载",
+  "diff.mapping.clear_all": "还原所有为默认",
+  "diff.mapping.clear_all.confirm": "把每行的对比条件还原成默认值(mode=全列相等 / 区分大小写 / 不 trim),确认继续?",
+  "diff.mapping.clear_all.empty": "当前没有任何对比行",
+  "diff.mapping.clear_all.ok": "已还原 {n} 行为默认",
+  "diff.mapping.load_all.miss_suffix": "(跳过 {miss} 行未存过)"
 }

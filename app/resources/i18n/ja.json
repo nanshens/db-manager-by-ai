@@ -532,5 +532,20 @@
   "dlg.import_sql.preview_title": "DDL プレビュー",
   "dlg.import_sql.no_target_selected": "各 DDL 行に最低 1 つの対象テーブルを選択",
   "dlg.import_sql.fk_done": "{n} テーブルに外部キー DDL を書き込み",
-  "dlg.import_sql.index_done": "{n} テーブルに INDEX DDL を書き込み"
+  "dlg.import_sql.index_done": "{n} テーブルに INDEX DDL を書き込み",
+  "diff.mapping.save_all": "すべて保存(各テーブルの _default を上書き)",
+  "diff.mapping.save_all.name": "ベース名(各行を {base}_{テーブル} に保存):",
+  "diff.mapping.save_all.empty": "保存対象の行がありません",
+  "diff.mapping.save_all.ok": "{n} 行のプリセットを保存(各テーブル _default)",
+  "diff.mapping.load_all": "すべて読込",
+  "diff.mapping.load_all.name": "ベース名({base}_{テーブル} を読み込み):",
+  "diff.mapping.load_all.empty": "マッピング行がありません",
+  "diff.mapping.load_all.no_presets": "まだプリセットが保存されていません",
+  "diff.mapping.load_all.ok": "{n} 行のプリセットを読込",
+  "diff.mapping.load_all.none": "読込可能な _default プリセットがありません",
+  "diff.mapping.clear_all": "すべてデフォルトに戻す",
+  "diff.mapping.clear_all.confirm": "各行の比較条件をデフォルト(mode=全列一致 / 大文字区別 / trim なし)に戻します。続行しますか?",
+  "diff.mapping.clear_all.empty": "対象行がありません",
+  "diff.mapping.clear_all.ok": "{n} 行をデフォルトに戻しました",
+  "diff.mapping.load_all.miss_suffix": "(未保存 {miss} 行をスキップ)"
 }

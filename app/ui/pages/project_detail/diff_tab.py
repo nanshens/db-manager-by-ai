@@ -700,12 +700,15 @@ class MappingRow(QFrame):
                 self.cols_btn.setText(tr("diff.row.pick_cols"))
 
     def _refresh_presets(self) -> None:
+        """只显示属于本行 A 表的预设(命名约定:{a_table}_*)— 跨表预设不展示"""
         cur = self.preset_combo.currentData() if hasattr(self, "preset_combo") else None
         self.preset_combo.blockSignals(True)
         self.preset_combo.clear()
         self.preset_combo.addItem(tr("diff.row.preset.none"), None)
+        prefix = f"{self._a_table}_"
         for n in list_presets():
-            self.preset_combo.addItem(n, n)
+            if n.startswith(prefix):
+                self.preset_combo.addItem(n, n)
         if cur:
             idx = self.preset_combo.findData(cur)
             if idx >= 0:
@@ -719,6 +722,10 @@ class MappingRow(QFrame):
         p = get_preset(name)
         if not p:
             return
+        self._apply_preset(p)
+
+    def _apply_preset(self, p: dict) -> None:
+        """把 dict preset 应用到本行控件"""
         self.mode_combo.setCurrentIndex(self.mode_combo.findData(p.get("mode", "all")))
         # checkbox 语义"不区分大小写"(勾上=启用),跟字段 case_sensitive(区分大小写)取反
         # 默认值 True(区分大小写)— 跟用户期望的"默认不勾=区分"对齐
@@ -730,14 +737,36 @@ class MappingRow(QFrame):
         else:
             self.cols_btn.setText(tr("diff.row.pick_cols"))
 
+    def _reset_to_defaults(self) -> None:
+        """把本行对比条件还原成默认(全列相等 + 区分大小写 + 不 trim + 不选列)"""
+        # mode 默认 "all"  — 第一个项
+        for i in range(self.mode_combo.count()):
+            if self.mode_combo.itemData(i) == "all":
+                self.mode_combo.setCurrentIndex(i)
+                break
+        self.case_chk.setChecked(False)   # 不勾 = 区分大小写
+        self.trim_chk.setChecked(False)   # 不勾 = trim 关
+        self._selected_cols = []
+        self.cols_btn.setText(tr("diff.row.pick_cols"))
+
     def _save_preset(self) -> None:
+        # 默认名带表名前缀;若用户在前面又敲了表名则剥掉一次(避免 users_users_default)
+        user_input = f"{self._a_table}_default"
         name, ok = QInputDialog.getText(
             self, tr("diff.row.save_preset"),
             tr("diff.row.save_preset.name"),
-            text=f"{self._a_table}_default",
+            text=user_input,
         )
         if not ok or not name.strip():
             return
+        prefix = f"{self._a_table}_"
+        name_stripped = name.strip()
+        # 强制加前缀(去掉重复前缀)
+        if not name_stripped.startswith(prefix):
+            name_stripped = prefix + name_stripped
+        elif name_stripped[len(prefix):].startswith(f"{self._a_table}_"):
+            # 用户敲了 users_users_xxx → 去重
+            name_stripped = prefix + name_stripped[len(prefix):].lstrip(f"{self._a_table}_")
         config = {
             "a_table": self._a_table,
             "mode": self.mode_combo.currentData(),
@@ -746,11 +775,11 @@ class MappingRow(QFrame):
             "case_sensitive": not self.case_chk.isChecked(),
             "trim": self.trim_chk.isChecked(),
         }
-        save_preset(name.strip(), config)
+        save_preset(name_stripped, config)
         if self.parent():
             for r in getattr(self.parent(), "_rows", []):
                 r._refresh_presets()
-        show_toast(tr("diff.row.save_preset.ok").format(name=name), "success")
+        show_toast(tr("diff.row.save_preset.ok").format(name=name_stripped), "success")
 
     def _delete_preset(self) -> None:
         name = self.preset_combo.currentData()
@@ -868,9 +897,36 @@ class MappingPanel(QFrame):
         v.setContentsMargins(8, 8, 8, 8)
         v.setSpacing(4)
 
+        # 标题栏:左 title,右 3 个批量预设按钮(stretch 在中间)
+        title_row = QHBoxLayout()
+        title_row.setContentsMargins(0, 0, 0, 0)
+        title_row.setSpacing(6)
         title = QLabel(tr("diff.mapping.title"))
         title.setStyleSheet("font-size: 13px; font-weight: 700;")
-        v.addWidget(title)
+        title_row.addWidget(title)
+        title_row.addStretch()
+        # 保存所有预设
+        self.btn_save_all = QPushButton(qta.icon("mdi6.content-save-all-outline", color="#22c55e"), "")
+        self.btn_save_all.setObjectName("Ghost")
+        self.btn_save_all.setFixedSize(28, 28)
+        self.btn_save_all.setToolTip(tr("diff.mapping.save_all"))
+        self.btn_save_all.clicked.connect(self._save_all_presets)
+        title_row.addWidget(self.btn_save_all)
+        # 加载所有预设
+        self.btn_load_all = QPushButton(qta.icon("mdi6.download-outline", color="#3b82f6"), "")
+        self.btn_load_all.setObjectName("Ghost")
+        self.btn_load_all.setFixedSize(28, 28)
+        self.btn_load_all.setToolTip(tr("diff.mapping.load_all"))
+        self.btn_load_all.clicked.connect(self._load_all_presets)
+        title_row.addWidget(self.btn_load_all)
+        # 还原所有为默认(把每行对比条件重置成默认,不删 QSettings 里的预设)
+        self.btn_clear_all = QPushButton(qta.icon("mdi6.refresh", color="#94a3b8"), "")
+        self.btn_clear_all.setObjectName("Ghost")
+        self.btn_clear_all.setFixedSize(28, 28)
+        self.btn_clear_all.setToolTip(tr("diff.mapping.clear_all"))
+        self.btn_clear_all.clicked.connect(self._clear_all_presets)
+        title_row.addWidget(self.btn_clear_all)
+        v.addLayout(title_row)
 
         self.hint = QLabel("")
         self.hint.setObjectName("Muted")
@@ -948,6 +1004,69 @@ class MappingPanel(QFrame):
             if t.name == first_a:
                 return [c.name for c in t.columns]
         return []
+
+    # ============== 批量预设(标题栏右侧 3 个按钮)==============
+    # 批量版用固定命名:{a_table}_default(覆盖式)— 跟行级单按钮的"任意名"区分
+    # 每行 preset combo 只看自己表名相关的预设,所以"加载所有"自动对每行找自己那份
+
+    def _save_all_presets(self) -> None:
+        """把所有行当前的对比条件存为各表的 _default 预设(覆盖式)。"""
+        if not self._rows:
+            show_toast(tr("diff.mapping.save_all.empty"), "warning")
+            return
+        n = 0
+        for row in self._rows:
+            cfg = {
+                "a_table": row._a_table,
+                "mode": row.mode_combo.currentData(),
+                "cols": list(row._selected_cols),
+                "case_sensitive": not row.case_chk.isChecked(),
+                "trim": row.trim_chk.isChecked(),
+            }
+            save_preset(f"{row._a_table}_default", cfg)
+            n += 1
+        for row in self._rows:
+            row._refresh_presets()
+        show_toast(tr("diff.mapping.save_all.ok").format(n=n), "success")
+
+    def _load_all_presets(self) -> None:
+        """对每行加载本表存的 _default 预设(找不到跳过)— 各表各加载各的。"""
+        if not self._rows:
+            show_toast(tr("diff.mapping.load_all.empty"), "warning")
+            return
+        n_loaded, n_miss = 0, 0
+        for row in self._rows:
+            data = get_preset(f"{row._a_table}_default")
+            if data is None:
+                n_miss += 1
+                continue
+            row._apply_preset(data)
+            n_loaded += 1
+        if n_loaded == 0:
+            # 全部没找到 — 通常是用户从没存过
+            show_toast(
+                tr("diff.mapping.load_all.none"),
+                "warning", 3000,
+            )
+        else:
+            msg = tr("diff.mapping.load_all.ok").format(n=n_loaded)
+            if n_miss:
+                msg += tr("diff.mapping.load_all.miss_suffix").format(miss=n_miss)
+            show_toast(msg, "success", 2500)
+
+    def _clear_all_presets(self) -> None:
+        """把所有行的对比条件还原成默认值(不动 QSettings,预设本身保留)。"""
+        if not self._rows:
+            show_toast(tr("diff.mapping.clear_all.empty"), "info")
+            return
+        if QMessageBox.question(
+            self, tr("common.confirm"),
+            tr("diff.mapping.clear_all.confirm"),
+        ) != QMessageBox.StandardButton.Yes:
+            return
+        for row in self._rows:
+            row._reset_to_defaults()
+        show_toast(tr("diff.mapping.clear_all.ok").format(n=len(self._rows)), "success", 1500)
 
     def collect_match_configs(self, a_tables: dict[str, tuple[str, str]],
                               b_tables: dict[str, tuple[str, str]]
