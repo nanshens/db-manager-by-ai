@@ -30,6 +30,8 @@ class Table:
     comment: str = ""
     columns: list[Column] = field(default_factory=list)
     ddl_text: str = ""
+    fk_ddl_text: str = ""        # FOREIGN KEY 约束 DDL(可空)
+    index_ddl_text: str = ""     # INDEX 约束 DDL(可空)
     created_at: str = ""
     updated_at: str = ""
 
@@ -52,6 +54,8 @@ def _row_to_table(r: sqlite3.Row) -> Table:
         comment=r["comment"] or "",
         columns=cols,
         ddl_text=r["ddl_text"] or "",
+        fk_ddl_text=r["fk_ddl_text"] or "",
+        index_ddl_text=r["index_ddl_text"] or "",
         created_at=r["created_at"],
         updated_at=r["updated_at"],
     )
@@ -89,7 +93,8 @@ class TableRepo:
 
     def list_by_project(self, project_id: int) -> list[Table]:
         rows = self._conn().execute(
-            "SELECT id, project_id, name, comment, columns_json, ddl_text, created_at, updated_at "
+            "SELECT id, project_id, name, comment, columns_json, ddl_text, "
+            "fk_ddl_text, index_ddl_text, created_at, updated_at "
             "FROM db_table WHERE project_id = ? ORDER BY name",
             (project_id,),
         ).fetchall()
@@ -97,7 +102,8 @@ class TableRepo:
 
     def get(self, table_id: int) -> Optional[Table]:
         r = self._conn().execute(
-            "SELECT id, project_id, name, comment, columns_json, ddl_text, created_at, updated_at "
+            "SELECT id, project_id, name, comment, columns_json, ddl_text, "
+            "fk_ddl_text, index_ddl_text, created_at, updated_at "
             "FROM db_table WHERE id = ?",
             (table_id,),
         ).fetchone()
@@ -115,9 +121,15 @@ class TableRepo:
         ddl = table.ddl_text or _build_ddl(table.name, table.columns)
         with transaction(self.db_path) as conn:
             cur = conn.execute(
-                "INSERT INTO db_table (project_id, name, comment, columns_json, ddl_text, created_at, updated_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (table.project_id, table.name, table.comment, cols_json, ddl, now, now),
+                "INSERT INTO db_table "
+                "(project_id, name, comment, columns_json, ddl_text, fk_ddl_text, index_ddl_text, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    table.project_id, table.name, table.comment,
+                    cols_json, ddl,
+                    table.fk_ddl_text or "", table.index_ddl_text or "",
+                    now, now,
+                ),
             )
             return cur.lastrowid
 
@@ -126,8 +138,13 @@ class TableRepo:
         ddl = _build_ddl(table.name, table.columns)
         with transaction(self.db_path) as conn:
             conn.execute(
-                "UPDATE db_table SET name=?, comment=?, columns_json=?, ddl_text=?, updated_at=? WHERE id=?",
-                (table.name, table.comment, cols_json, ddl, _now(), table.id),
+                "UPDATE db_table SET name=?, comment=?, columns_json=?, ddl_text=?, "
+                "fk_ddl_text=?, index_ddl_text=?, updated_at=? WHERE id=?",
+                (
+                    table.name, table.comment, cols_json, ddl,
+                    table.fk_ddl_text or "", table.index_ddl_text or "",
+                    _now(), table.id,
+                ),
             )
 
     def delete(self, table_id: int) -> None:

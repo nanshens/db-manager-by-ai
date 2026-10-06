@@ -44,13 +44,25 @@ def set_sidebar(state: str) -> None:
 # ===== Lite 模式(打包定制:只显示部分 tab)=====
 # 打包精简版时:把下面的 _LITE_MODE 改成 True,然后只编译 LITE_NAV_ITEMS 列出的 page_id
 # 开发/全功能版:保持 _LITE_MODE = False
-_LITE_MODE = True
+_LITE_MODE = False
 
 # Lite 模式下 sidebar 显示哪些 tab(只保留 page_id 在这个列表里的)
 LITE_NAV_ITEMS = [
     "excel_tpl",       # PageId.EXCEL_TPL
     "excel_parse",     # PageId.EXCEL_PARSE
 ]
+
+# Lite 模式下启动时默认进入哪个页面(只在此模式生效)
+# 值必须是 LITE_NAV_ITEMS 里的一项,否则启动 fallback 到列表第一项
+# 改成 "_LITE_MODE = False" 后此常量会被忽略(默认走 PageId.PROJECTS)
+_LITE_INITIAL_PAGE = "excel_tpl"   # ← 改成你想要的 page_id (excel_tpl / excel_parse)
+
+
+def get_lite_initial_page() -> str:
+    """Lite 模式启动页配置(供 main_window 使用)。"""
+    return _LITE_INITIAL_PAGE if _LITE_INITIAL_PAGE in LITE_NAV_ITEMS else (
+        LITE_NAV_ITEMS[0] if LITE_NAV_ITEMS else "projects"
+    )
 
 
 def is_lite_mode() -> bool:

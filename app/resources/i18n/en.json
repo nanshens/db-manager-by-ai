@@ -1,7 +1,6 @@
 {
   "app.name": "DBManager",
   "app.subtitle": "Database Management Tool",
-
   "nav.dashboard": "Dashboard",
   "nav.projects": "Projects",
   "nav.sqllib": "SQL Library",
@@ -9,7 +8,6 @@
   "nav.file_convert": "File Convert",
   "nav.db_links": "DB Links",
   "nav.settings": "Settings",
-
   "action.new": "New",
   "action.edit": "Edit",
   "action.delete": "Delete",
@@ -24,7 +22,6 @@
   "action.import": "Import",
   "action.export": "Export",
   "action.add": "Add",
-
   "home.welcome": "Welcome to DBManager",
   "home.subtitle": "Manage your projects / schemas / data versions / SQL snippets / Excel templates",
   "home.stat.projects": "Projects",
@@ -35,13 +32,11 @@
   "home.recent_snippets": "Recent SQL usage",
   "home.no_recent": "No records yet",
   "home.no_projects": "No projects yet. Click below to create your first one.",
-
   "projects.title": "Projects",
   "projects.new": "New project",
   "projects.search_placeholder": "Search project name...",
   "projects.empty.title": "No projects yet",
   "projects.empty.desc": "Create your first project to start managing schemas and data",
-
   "project_detail.tabs.tables": "Tables",
   "project_detail.tabs.versions": "Data versions",
   "project_detail.tabs.sqlgen": "SQL Generator",
@@ -49,7 +44,6 @@
   "project_detail.tabs.overview": "Overview",
   "project_detail.created": "Created",
   "project_detail.updated": "Updated",
-
   "sqllib.title": "SQL Library",
   "sqllib.search_placeholder": "Search title / SQL / tag...",
   "sqllib.new": "New SQL",
@@ -65,7 +59,6 @@
   "sqllib.empty.desc": "Save your frequently used SQL for one-click copy",
   "sqllib.empty.search.title": "No matching SQL",
   "sqllib.empty.search.desc": "Try a different keyword, or clear the filters",
-
   "excel_tpl.title": "Excel Parse Templates",
   "excel_tpl.subtitle": "Manage \"config sheet + multiple data sheets\" parsing rules",
   "excel_tpl.new": "New template",
@@ -77,9 +70,6 @@
   "excel_tpl.col.config_sheet": "Config sheet",
   "excel_tpl.col.rows": "header/data",
   "excel_tpl.col.usage": "Usage",
-  "excel_tpl.action.apply": "Apply",
-  "excel_tpl.action.duplicate": "Duplicate",
-
   "settings.title": "Settings",
   "settings.appearance": "Appearance",
   "settings.theme": "Theme",
@@ -97,7 +87,6 @@
   "settings.about": "About",
   "settings.about.version": "Version",
   "settings.about.desc": "Personal desktop database management tool",
-
   "common.loading": "Loading...",
   "common.empty": "No data",
   "common.coming_soon": "Feature in development",
@@ -108,18 +97,15 @@
   "common.more": "More",
   "common.total": "Total",
   "common.items": "items",
-
   "toast.copied": "Copied to clipboard",
   "toast.saved": "Saved",
   "toast.deleted": "Deleted",
   "toast.error": "Operation failed",
   "toast.coming_soon": "Feature coming soon",
-
   "action.create": "Create",
   "action.confirm_delete": "Confirm delete",
   "action.select_all": "Select all",
   "action.deselect_all": "Deselect all",
-
   "dlg.new_project.title": "New project",
   "dlg.edit_project.title": "Edit project",
   "dlg.project.name": "Project name",
@@ -128,7 +114,6 @@
   "dlg.project.desc.placeholder": "Brief description (optional)",
   "dlg.project.color": "Tag color",
   "dlg.project.color.pick": "Pick color",
-
   "dlg.column.title": "Edit column",
   "dlg.column.name": "Column name",
   "dlg.column.type": "Type",
@@ -139,7 +124,6 @@
   "dlg.column.error.name_required": "Column name is required",
   "dlg.column.error.duplicate": "Duplicate column name",
   "dlg.column.error.invalid_name": "Invalid column name",
-
   "dlg.new_table.title": "New table",
   "dlg.edit_table.title": "Edit table",
   "dlg.table.name": "Table name",
@@ -154,7 +138,6 @@
   "dlg.table.error.cols_required": "At least 1 column is required",
   "dlg.table.error.name_invalid": "Invalid table name",
   "dlg.table.error.duplicate": "Table name already exists",
-
   "dlg.sql.new": "New SQL snippet",
   "dlg.sql.edit": "Edit SQL snippet",
   "dlg.sql.title": "Title",
@@ -167,17 +150,14 @@
   "dlg.sql.content.tip": "Auto-suggest after 2 chars · Tab to accept · Esc to close",
   "dlg.sql.error.title_required": "Title is required",
   "dlg.sql.error.content_required": "SQL content is required",
-
   "common.confirm": "Confirm",
   "common.error": "Error",
   "common.success": "Success",
   "common.warning": "Warning",
-
   "dlg.confirm.delete_project.title": "Delete project",
   "dlg.confirm.delete_project.msg": "Delete project \"{name}\"?\nThis will also remove all its tables / versions / SQL bindings. Cannot be undone.",
   "dlg.confirm.delete_table.title": "Delete table",
   "dlg.confirm.delete_table.msg": "Delete table \"{name}\"?",
-
   "dlg.import_sql.title": "Import tables from SQL",
   "dlg.import_sql.browse_title": "Select SQL file",
   "dlg.import_sql.file": "SQL file:",
@@ -194,7 +174,6 @@
   "dlg.import_sql.done": "Imported {n} table(s)",
   "dlg.import_sql.partial": "Imported {ok}, failed {fail}",
   "dlg.import_sql.fail": "Import failed",
-
   "tables_tab.title": "Tables",
   "tables_tab.add_table": "Add table",
   "tables_tab.empty.title": "No tables yet",
@@ -207,12 +186,10 @@
   "tables_tab.delete_all.msg": "Delete all {n} tables in this project (irreversible). Continue?",
   "tables_tab.delete_all.done": "Deleted {n} tables",
   "tables_tab.delete_all.empty": "No tables to delete",
-
   "versions_tab.title": "Data versions",
   "versions_tab.new_version": "New version",
   "versions_tab.empty.title": "No data versions yet",
   "versions_tab.empty.desc": "Upload CSV/TSV/XLSX files for this table to create data snapshots",
-
   "sqlgen_tab.title": "SQL generator",
   "sqlgen_tab.placeholder": "Select a table to start generating SQL",
   "sqlgen_tab.tables": "Tables (multi-select)",
@@ -234,7 +211,6 @@
   "sqlgen_tab.io.dir": "Dir",
   "sqlgen_tab.io.dir.placeholder": "Empty = filename only",
   "sqlgen_tab.io.dir.tip": "Empty → \"{t_name}.{fmt}\" only; with value → \"{dir}/{t_name}.{fmt}\"",
-
   "file_convert.title": "File Convert",
   "file_convert.subtitle": "TSV ↔ CSV, with line-ending strategy (important for LF/CRLF preservation)",
   "file_convert.source": "Source file:",
@@ -257,12 +233,9 @@
   "file_convert.src_not_exist": "Source file does not exist",
   "file_convert.browse_src": "Choose source file",
   "file_convert.browse_dst": "Choose target file",
-
   "action.browse": "Browse",
   "action.open": "Open",
-
   "versions_tab.no_tables": "Please create at least one table in this project first",
-
   "dlg.version.title": "New data version",
   "dlg.version.name": "Version name",
   "dlg.version.desc": "Description",
@@ -308,7 +281,6 @@
   "versions_tab.check.missing": "In table but not in file: {cols}",
   "versions_tab.check.extra": "In file but not in table: {cols}",
   "versions_tab.check.ok": "All column names and count match",
-
   "diff.source_a": "Source A:",
   "diff.source_b": "Source B:",
   "diff.source.title": "Sources",
@@ -330,10 +302,8 @@
   "diff.src.choose_template": "Pick parse template",
   "diff.src.choose_excel": "Pick Excel file",
   "diff.src.choose_version": "Pick data version",
-  "diff.mapping.title": "Table mapping (A → B, auto by name)",
   "diff.mapping.empty_left": "No source on the left side",
   "diff.mapping.empty_right": "No source on the right side",
-  "diff.mapping.hint": "{n_a} tables on left, {n_b} on right, {n_auto} auto-matched. Manually pick B or skip unmatched.",
   "diff.mapping.skip": "— Skip —",
   "diff.match_mode": "Match rule:",
   "diff.match_mode.all": "All columns",
@@ -372,7 +342,6 @@
   "diff.no_a_tables": "No tables on the left",
   "diff.no_a_cols": "No columns found for the left A table (table missing in this project?)",
   "diff.error.no_sources": "Both sides need at least one source",
-  "diff.error.no_pairs": "No paired tables — pick B or skip in the mapping panel",
   "diff.error.no_cols": "Selected-columns mode requires picking at least one column",
   "diff.result.pairs": "Pairs",
   "diff.result.content": "File content",
@@ -396,25 +365,17 @@
   "dlg.version.warn.unmatched_title": "Unmatched files",
   "dlg.version.warn.unmatched": "{n} files are not matched to any table:\n{files}\n\nThese will NOT be imported into this version. Only matched files will be saved. Continue?",
   "dlg.version.warn.unmatched_more": "\n(and {extra} more…)",
-  "diff.mapping.title": "Table mapping (A → B)",
-  "diff.mapping.skip": "— Skip —",
-  "diff.mapping.hint": "Left {n_a} tables, right {n_b} tables, {n_auto} auto-matched. Manually pick or skip the rest.",
-  "diff.error.no_pairs": "Configure at least one table pair to diff",
   "diff.error.missing_left": "Left file missing: {path}",
   "diff.error.missing_right": "Right file missing: {path}",
   "diff.error.unsupported_left": "Left file format unsupported: {path}",
   "diff.error.unsupported_right": "Right file format unsupported: {path}",
   "diff.warn.skipped": "Skipped {n} invalid file pairs (missing or unsupported format)",
   "diff.result.overview": "Overview",
-  "diff.result.added": "Added",
-  "diff.result.removed": "Removed",
-  "diff.result.modified": "Modified",
   "diff.result.col.pair": "Pair",
   "diff.result.col.key": "PK",
   "diff.result.col.left": "Left",
   "diff.result.col.right": "Right",
   "diff.browse_title": "Select data file",
-
   "dlg.compare.new": "New compare config",
   "dlg.compare.edit": "Edit compare config",
   "dlg.compare.name": "Config name",
@@ -427,7 +388,6 @@
   "dlg.compare.is_default": "Set as default for this table",
   "dlg.compare.error.name_required": "Config name is required",
   "dlg.compare.error.pk_required": "At least 1 primary key is required",
-
   "dlg.excel.new": "New Excel parse template",
   "dlg.excel.edit": "Edit Excel template",
   "dlg.excel.name": "Template name",
@@ -443,10 +403,6 @@
   "dlg.excel.error.tn_col_required": "Table name column is required",
   "dlg.excel.error.sn_col_required": "Sheet name column is required",
   "dlg.excel.error.data_before_header": "Data start row must be >= header row",
-
-  "excel_tpl.action.duplicate": "Duplicate template",
-  "excel_tpl.action.apply": "Apply template",
-
   "dlg.excel_parse.title": "Excel parse preview",
   "dlg.excel_parse.file": "Excel file",
   "dlg.excel_parse.config_sheet": "Config sheet",
@@ -454,12 +410,9 @@
   "dlg.excel_parse.tables": "Parsed tables",
   "dlg.excel_parse.no_file": "Please select an Excel file first",
   "dlg.excel_parse.errors": "Issues found during parsing:",
-
   "projects.empty.search.title": "No matching projects",
   "projects.empty.search.desc": "Try different keywords",
-
   "common.info": "Info",
-
   "db_link.title": "DB Links",
   "db_link.description.hint": "Save db connection info (postgres / mysql / oracle). The SQL generator picks a link and produces pg_dump / mysqldump / expdp commands to export table data as INSERT SQL.",
   "db_link.search_placeholder": "Search link name / type",
@@ -559,6 +512,25 @@
   "excel_parse.count": "{total} sheets (ok {ok}, failed {err})",
   "excel_parse.clear": "Clear",
   "excel_parse.clear.tip": "Clear file + parsed results (keep template)",
-  "excel_parse.clear.done": "Cleared"
-
+  "excel_parse.clear.done": "Cleared",
+  "diff.error.no_pairs": "Configure at least one table pair to diff",
+  "diff.mapping.title": "Table mapping (A → B)",
+  "diff.mapping.hint": "Left {n_a} tables, right {n_b} tables, {n_auto} auto-matched. Manually pick or skip the rest.",
+  "excel_tpl.action.apply": "Apply template",
+  "excel_tpl.action.duplicate": "Duplicate template",
+  "sqlgen_tab.op_create.tip": "Output CREATE TABLE DDL (with FOREIGN KEY / INDEX if any)",
+  "tables_tab.ddl_tab.create": "CREATE TABLE",
+  "tables_tab.ddl_tab.fk": "FOREIGN KEY",
+  "tables_tab.ddl_tab.index": "INDEX",
+  "dlg.import_sql.kind.create": "CREATE TABLE",
+  "dlg.import_sql.kind.fk": "FK DDL",
+  "dlg.import_sql.kind.index": "INDEX DDL",
+  "dlg.import_sql.file.placeholder.multi": "Pick multiple .sql files (separate with ; or newline)",
+  "dlg.import_sql.file.tip": "Multi-select supported — files are concatenated and parsed together",
+  "dlg.import_sql.ddl_paste.placeholder": "Paste {kind} statements here (multiple ALTER TABLE / CREATE INDEX, separated by semicolons)",
+  "dlg.import_sql.paste_label": "paste",
+  "dlg.import_sql.preview_title": "DDL Preview",
+  "dlg.import_sql.no_target_selected": "Pick a target table for every DDL row",
+  "dlg.import_sql.fk_done": "Wrote FK DDL into {n} table(s)",
+  "dlg.import_sql.index_done": "Wrote INDEX DDL into {n} table(s)"
 }

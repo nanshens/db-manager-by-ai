@@ -113,7 +113,15 @@ class MainWindow(QMainWindow):
         self._build_content()
         self._build_shortcuts()
         self._apply_sidebar_state(animate=False)
-        self._switch_page(PageId.PROJECTS)
+        # Lite 模式启动页走 config 里配置的常量,否则全功能模式默认进项目一览
+        if app_config.is_lite_mode():
+            initial = app_config.get_lite_initial_page()
+            try:
+                self._switch_page(PageId(initial))
+            except ValueError:
+                self._switch_page(PageId.PROJECTS)
+        else:
+            self._switch_page(PageId.PROJECTS)
 
     # ============== 构建 ==============
     def _build_root(self) -> None:

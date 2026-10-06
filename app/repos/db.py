@@ -19,14 +19,16 @@ CREATE TABLE IF NOT EXISTS project (
 
 -- 表结构
 CREATE TABLE IF NOT EXISTS db_table (
-  id           INTEGER PRIMARY KEY,
-  project_id   INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
-  name         TEXT NOT NULL,
-  comment      TEXT,
-  columns_json TEXT NOT NULL,
-  ddl_text     TEXT NOT NULL,
-  created_at   TEXT NOT NULL,
-  updated_at   TEXT NOT NULL,
+  id              INTEGER PRIMARY KEY,
+  project_id      INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+  name            TEXT NOT NULL,
+  comment         TEXT,
+  columns_json    TEXT NOT NULL,
+  ddl_text        TEXT NOT NULL,
+  fk_ddl_text     TEXT NOT NULL DEFAULT '',
+  index_ddl_text  TEXT NOT NULL DEFAULT '',
+  created_at      TEXT NOT NULL,
+  updated_at      TEXT NOT NULL,
   UNIQUE(project_id, name)
 );
 
@@ -231,6 +233,8 @@ def init_db(db_path: Path) -> None:
     _migrate_add_dialect(conn)
     # 迁移:给老 excel_template 加 3 列(parse_mode / column_start / name_mapping)
     _migrate_excel_template(conn)
+    # 迁移:给老 db_table 加 fk_ddl_text / index_ddl_text 两列
+    _migrate_table_ddl(conn)
     conn.commit()
 
 
@@ -252,6 +256,15 @@ def _migrate_excel_template(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE excel_template ADD COLUMN column_start INTEGER DEFAULT 1")
     if "name_mapping" not in cols:
         conn.execute("ALTER TABLE excel_template ADD COLUMN name_mapping TEXT DEFAULT '{}'")
+
+
+def _migrate_table_ddl(conn: sqlite3.Connection) -> None:
+    """给老 db_table 补 2 列:fk_ddl_text / index_ddl_text(2026-09 新增)"""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(db_table)").fetchall()}
+    if "fk_ddl_text" not in cols:
+        conn.execute("ALTER TABLE db_table ADD COLUMN fk_ddl_text TEXT NOT NULL DEFAULT ''")
+    if "index_ddl_text" not in cols:
+        conn.execute("ALTER TABLE db_table ADD COLUMN index_ddl_text TEXT NOT NULL DEFAULT ''")
     # 老 schema 里 config_sheet_name / table_name_col / sheet_name_col 是 NOT NULL,
     # 改成允许空(mode 2/3 不需要这些字段)
     for col in ("config_sheet_name", "table_name_col", "sheet_name_col"):

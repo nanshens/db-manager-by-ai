@@ -1,7 +1,6 @@
 {
   "app.name": "DBManager",
   "app.subtitle": "データベース管理ツール",
-
   "nav.dashboard": "ダッシュボード",
   "nav.projects": "プロジェクト",
   "nav.sqllib": "SQLライブラリ",
@@ -9,7 +8,6 @@
   "nav.file_convert": "ファイル変換",
   "nav.db_links": "DBリンク",
   "nav.settings": "設定",
-
   "action.new": "新規",
   "action.edit": "編集",
   "action.delete": "削除",
@@ -24,7 +22,6 @@
   "action.import": "インポート",
   "action.export": "エクスポート",
   "action.add": "追加",
-
   "home.welcome": "DBManager へようこそ",
   "home.subtitle": "プロジェクト / スキーマ / データバージョン / SQL / Excelテンプレートを管理",
   "home.stat.projects": "プロジェクト",
@@ -35,13 +32,11 @@
   "home.recent_snippets": "最近使ったSQL",
   "home.no_recent": "まだ記録がありません",
   "home.no_projects": "まだプロジェクトがありません。下のボタンで作成してください",
-
   "projects.title": "プロジェクト",
   "projects.new": "新規プロジェクト",
   "projects.search_placeholder": "プロジェクト名を検索...",
   "projects.empty.title": "プロジェクトがありません",
   "projects.empty.desc": "最初のプロジェクトを作成して、スキーマとデータの管理を始めましょう",
-
   "project_detail.tabs.tables": "テーブル",
   "project_detail.tabs.versions": "データバージョン",
   "project_detail.tabs.sqlgen": "SQL生成",
@@ -49,7 +44,6 @@
   "project_detail.tabs.overview": "概要",
   "project_detail.created": "作成日",
   "project_detail.updated": "更新日",
-
   "sqllib.title": "SQLライブラリ",
   "sqllib.search_placeholder": "タイトル / SQL / タグ を検索...",
   "sqllib.new": "新規SQL",
@@ -65,7 +59,6 @@
   "sqllib.empty.desc": "よく使うSQLを保存して、ワンクリックでコピー",
   "sqllib.empty.search.title": "一致するSQLが見つかりません",
   "sqllib.empty.search.desc": "別のキーワードを試すか、フィルターをクリアしてください",
-
   "excel_tpl.title": "Excel解析テンプレート",
   "excel_tpl.subtitle": "\"設定シート + 複数データシート\" パースのルールを管理",
   "excel_tpl.new": "新規テンプレート",
@@ -77,9 +70,6 @@
   "excel_tpl.col.config_sheet": "設定シート",
   "excel_tpl.col.rows": "header/data 行",
   "excel_tpl.col.usage": "使用回数",
-  "excel_tpl.action.apply": "適用",
-  "excel_tpl.action.duplicate": "複製",
-
   "settings.title": "設定",
   "settings.appearance": "外観",
   "settings.theme": "テーマ",
@@ -97,7 +87,6 @@
   "settings.about": "情報",
   "settings.about.version": "バージョン",
   "settings.about.desc": "個人用デスクトップデータベース管理ツール",
-
   "common.loading": "読み込み中...",
   "common.empty": "データなし",
   "common.coming_soon": "機能開発中",
@@ -108,18 +97,15 @@
   "common.more": "詳細",
   "common.total": "合計",
   "common.items": "件",
-
   "toast.copied": "クリップボードにコピーしました",
   "toast.saved": "保存しました",
   "toast.deleted": "削除しました",
   "toast.error": "操作に失敗しました",
   "toast.coming_soon": "近日公開",
-
   "action.create": "作成",
   "action.confirm_delete": "削除確認",
   "action.select_all": "すべて選択",
   "action.deselect_all": "選択解除",
-
   "dlg.new_project.title": "新規プロジェクト",
   "dlg.edit_project.title": "プロジェクト編集",
   "dlg.project.name": "プロジェクト名",
@@ -128,7 +114,6 @@
   "dlg.project.desc.placeholder": "プロジェクト概要(オプション)",
   "dlg.project.color": "タグ色",
   "dlg.project.color.pick": "色を選択",
-
   "dlg.column.title": "列編集",
   "dlg.column.name": "列名",
   "dlg.column.type": "型",
@@ -139,7 +124,6 @@
   "dlg.column.error.name_required": "列名は必須です",
   "dlg.column.error.duplicate": "列名が重複しています",
   "dlg.column.error.invalid_name": "列名が無効です",
-
   "dlg.new_table.title": "新規テーブル",
   "dlg.edit_table.title": "テーブル編集",
   "dlg.table.name": "テーブル名",
@@ -154,7 +138,6 @@
   "dlg.table.error.cols_required": "少なくとも1列必要です",
   "dlg.table.error.name_invalid": "テーブル名が無効です",
   "dlg.table.error.duplicate": "テーブル名が重複しています",
-
   "dlg.sql.new": "新規SQLスニペット",
   "dlg.sql.edit": "SQLスニペット編集",
   "dlg.sql.title": "タイトル",
@@ -167,17 +150,14 @@
   "dlg.sql.content.tip": "2 文字で自動補完 · Tab で確定 · Esc で閉じる",
   "dlg.sql.error.title_required": "タイトルは必須です",
   "dlg.sql.error.content_required": "SQL内容は必須です",
-
   "common.confirm": "確認",
   "common.error": "エラー",
   "common.success": "成功",
   "common.warning": "警告",
-
   "dlg.confirm.delete_project.title": "プロジェクト削除",
   "dlg.confirm.delete_project.msg": "プロジェクト「{name}」を削除しますか?\nすべてのテーブル / バージョン / SQL バインドも削除されます。元に戻せません。",
   "dlg.confirm.delete_table.title": "テーブル削除",
   "dlg.confirm.delete_table.msg": "テーブル「{name}」を削除しますか?",
-
   "dlg.import_sql.title": "SQL からテーブルをインポート",
   "dlg.import_sql.browse_title": "SQL ファイルを選択",
   "dlg.import_sql.file": "SQL ファイル:",
@@ -194,7 +174,6 @@
   "dlg.import_sql.done": "{n} 件のテーブルをインポートしました",
   "dlg.import_sql.partial": "完了: {ok} 件成功、{fail} 件失敗",
   "dlg.import_sql.fail": "インポート失敗",
-
   "tables_tab.title": "テーブル",
   "tables_tab.add_table": "テーブル追加",
   "tables_tab.empty.title": "テーブルがありません",
@@ -207,12 +186,10 @@
   "tables_tab.delete_all.msg": "このプロジェクトの {n} 件のテーブルを全て削除します(取り消し不可)。続行しますか?",
   "tables_tab.delete_all.done": "{n} 件のテーブルを削除しました",
   "tables_tab.delete_all.empty": "削除するテーブルがありません",
-
   "versions_tab.title": "データバージョン",
   "versions_tab.new_version": "新規バージョン",
   "versions_tab.empty.title": "データバージョンがありません",
   "versions_tab.empty.desc": "このテーブルにCSV/TSV/XLSXをアップロードしてスナップショットを作成",
-
   "sqlgen_tab.title": "SQL生成",
   "sqlgen_tab.placeholder": "テーブルを選んでSQLを生成",
   "sqlgen_tab.tables": "テーブル選択(複数可)",
@@ -234,7 +211,6 @@
   "sqlgen_tab.io.dir": "ディレクトリ",
   "sqlgen_tab.io.dir.placeholder": "空欄 = ファイル名のみ",
   "sqlgen_tab.io.dir.tip": "空欄 → 「{t_name}.{fmt}」のみ; 入力時 → 「{dir}/{t_name}.{fmt}」",
-
   "file_convert.title": "ファイル変換",
   "file_convert.subtitle": "TSV ↔ CSV 相互変換、改行コードを制御(LF/CRLF を保持)",
   "file_convert.source": "入力ファイル:",
@@ -257,12 +233,9 @@
   "file_convert.src_not_exist": "入力ファイルが存在しません",
   "file_convert.browse_src": "入力ファイル選択",
   "file_convert.browse_dst": "出力ファイル選択",
-
   "action.browse": "参照",
   "action.open": "開く",
-
   "versions_tab.no_tables": "このプロジェクトにまずテーブルを作成してください",
-
   "dlg.version.title": "新規データバージョン",
   "dlg.version.name": "バージョン名",
   "dlg.version.desc": "説明",
@@ -308,7 +281,6 @@
   "versions_tab.check.missing": "テーブルにありファイルに無し: {cols}",
   "versions_tab.check.extra": "ファイルにありテーブルに無し: {cols}",
   "versions_tab.check.ok": "列名・列数すべて一致",
-
   "diff.source_a": "ソース A:",
   "diff.source_b": "ソース B:",
   "diff.source.title": "ソース",
@@ -330,10 +302,6 @@
   "diff.src.choose_template": "解析テンプレ選択",
   "diff.src.choose_excel": "Excel ファイル選択",
   "diff.src.choose_version": "データバージョン選択",
-  "diff.mapping.title": "テーブルマッピング (A → B, 同名自動)",
-  "diff.mapping.empty_left": "左側にソースなし",
-  "diff.mapping.empty_right": "右側にソースなし",
-  "diff.mapping.hint": "左 {n_a}、右 {n_b}、自動一致 {n_auto}。残り は手動選択またはスキップ",
   "diff.mapping.skip": "— スキップ —",
   "diff.match_mode": "判定条件:",
   "diff.match_mode.all": "全カラム一致",
@@ -372,7 +340,6 @@
   "diff.no_a_tables": "左側にテーブルなし",
   "diff.no_a_cols": "左側 A テーブルの列を取得できません",
   "diff.error.no_sources": "両側にソースが必要です",
-  "diff.error.no_pairs": "ペアなし — マッピングで B を選択またはスキップ",
   "diff.error.no_cols": "「指定カラム一致」モードでは、先に「列選択…」で 1 列以上選んでください",
   "diff.result.pairs": "ペア",
   "diff.result.content": "ファイル内容",
@@ -396,25 +363,17 @@
   "dlg.version.warn.unmatched_title": "未一致ファイル",
   "dlg.version.warn.unmatched": "{n} 件のファイルがテーブルに一致していません:\n{files}\n\nこれらはこのバージョンに取り込まれません。一致したファイルのみ保存されます。続行しますか?",
   "dlg.version.warn.unmatched_more": "\n(他 {extra} 件…)",
-  "diff.mapping.title": "テーブルマッピング (A → B)",
-  "diff.mapping.skip": "— スキップ —",
-  "diff.mapping.hint": "左 {n_a} テーブル、右 {n_b} テーブル、自動一致 {n_auto} 件。残り は手動選択またはスキップしてください。",
-  "diff.error.no_pairs": "比較するテーブルペアを 1 つ以上設定してください",
   "diff.error.missing_left": "左ファイルなし: {path}",
   "diff.error.missing_right": "右ファイルなし: {path}",
   "diff.error.unsupported_left": "左ファイル未対応: {path}",
   "diff.error.unsupported_right": "右ファイル未対応: {path}",
   "diff.warn.skipped": "無効なファイルペア {n} 件をスキップ(不存在または未対応形式)",
   "diff.result.overview": "概要",
-  "diff.result.added": "追加",
-  "diff.result.removed": "削除",
-  "diff.result.modified": "変更",
   "diff.result.col.pair": "ペア",
   "diff.result.col.key": "主キー",
   "diff.result.col.left": "左",
   "diff.result.col.right": "右",
   "diff.browse_title": "データファイル選択",
-
   "dlg.compare.new": "新規比較設定",
   "dlg.compare.edit": "比較設定編集",
   "dlg.compare.name": "設定名",
@@ -427,7 +386,6 @@
   "dlg.compare.is_default": "このテーブルのデフォルトに設定",
   "dlg.compare.error.name_required": "設定名は必須です",
   "dlg.compare.error.pk_required": "主キーは1つ以上必要です",
-
   "dlg.excel.new": "新規Excel解析テンプレート",
   "dlg.excel.edit": "Excelテンプレート編集",
   "dlg.excel.name": "テンプレート名",
@@ -443,10 +401,6 @@
   "dlg.excel.error.tn_col_required": "テーブル名列は必須です",
   "dlg.excel.error.sn_col_required": "シート名列は必須です",
   "dlg.excel.error.data_before_header": "data開始行はheader行以上である必要があります",
-
-  "excel_tpl.action.duplicate": "テンプレート複製",
-  "excel_tpl.action.apply": "テンプレート適用",
-
   "dlg.excel_parse.title": "Excel解析プレビュー",
   "dlg.excel_parse.file": "Excelファイル",
   "dlg.excel_parse.config_sheet": "設定シート",
@@ -454,12 +408,9 @@
   "dlg.excel_parse.tables": "解析されたテーブル",
   "dlg.excel_parse.no_file": "まずExcelファイルを選択してください",
   "dlg.excel_parse.errors": "解析中に問題が発見されました:",
-
   "projects.empty.search.title": "該当するプロジェクトがありません",
   "projects.empty.search.desc": "別のキーワードをお試しください",
-
   "common.info": "お知らせ",
-
   "db_link.title": "DB リンク管理",
   "db_link.description.hint": "DB 接続情報 (postgres / mysql / oracle) を保存。SQL 生成器で db_link を選び、pg_dump / mysqldump / expdp コマンドを生成し、テーブルデータを INSERT SQL としてエクスポートします。",
   "db_link.search_placeholder": "リンク名 / タイプで検索",
@@ -559,5 +510,27 @@
   "excel_parse.count": "全 {total} シート（成功 {ok}、失敗 {err}）",
   "excel_parse.clear": "クリア",
   "excel_parse.clear.tip": "ファイル + 解析結果をクリア(テンプレートは保持)",
-  "excel_parse.clear.done": "クリアしました"
+  "excel_parse.clear.done": "クリアしました",
+  "diff.error.no_pairs": "比較するテーブルペアを 1 つ以上設定してください",
+  "excel_tpl.action.apply": "テンプレート適用",
+  "excel_tpl.action.duplicate": "テンプレート複製",
+  "diff.mapping.title": "テーブルマッピング (A → B)",
+  "diff.mapping.empty_left": "左側にソースなし",
+  "diff.mapping.empty_right": "右側にソースなし",
+  "diff.mapping.hint": "左 {n_a} テーブル、右 {n_b} テーブル、自動一致 {n_auto} 件。残り は手動選択またはスキップしてください。",
+  "sqlgen_tab.op_create.tip": "CREATE TABLE DDL を出力(あれば FOREIGN KEY / INDEX も含む)",
+  "tables_tab.ddl_tab.create": "CREATE TABLE",
+  "tables_tab.ddl_tab.fk": "FOREIGN KEY",
+  "tables_tab.ddl_tab.index": "INDEX",
+  "dlg.import_sql.kind.create": "CREATE TABLE",
+  "dlg.import_sql.kind.fk": "外部キー DDL",
+  "dlg.import_sql.kind.index": "INDEX DDL",
+  "dlg.import_sql.file.placeholder.multi": "複数の .sql ファイルを選択(; か改行で区切り)",
+  "dlg.import_sql.file.tip": "複数選択可 — 連結してまとめて解析",
+  "dlg.import_sql.ddl_paste.placeholder": "{kind} 文をここに貼付け(複数の ALTER TABLE / CREATE INDEX、セミコロン区切り)",
+  "dlg.import_sql.paste_label": "貼付",
+  "dlg.import_sql.preview_title": "DDL プレビュー",
+  "dlg.import_sql.no_target_selected": "各 DDL 行に最低 1 つの対象テーブルを選択",
+  "dlg.import_sql.fk_done": "{n} テーブルに外部キー DDL を書き込み",
+  "dlg.import_sql.index_done": "{n} テーブルに INDEX DDL を書き込み"
 }

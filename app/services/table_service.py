@@ -23,7 +23,8 @@ class TableService:
     def get(self, table_id: int) -> Optional[Table]:
         return self.repo.get(table_id)
 
-    def create(self, project_id: int, name: str, comment: str, columns: list[Column]) -> Table:
+    def create(self, project_id: int, name: str, comment: str, columns: list[Column],
+               fk_ddl_text: str = "", index_ddl_text: str = "") -> Table:
         name = name.strip()
         if not _valid_ident(name):
             raise ValueError(f"表名不合法: {name!r} (字母/下划线开头,只含字母数字下划线)")
@@ -48,11 +49,14 @@ class TableService:
         t = Table(
             id=None, project_id=project_id, name=name, comment=comment.strip(),
             columns=columns, ddl_text="",
+            fk_ddl_text=fk_ddl_text or "",
+            index_ddl_text=index_ddl_text or "",
         )
         tid = self.repo.create(t)
         return self.repo.get(tid)
 
-    def update(self, table_id: int, name: str, comment: str, columns: list[Column]) -> Table:
+    def update(self, table_id: int, name: str, comment: str, columns: list[Column],
+               fk_ddl_text: str = "", index_ddl_text: str = "") -> Table:
         existing = self.repo.get(table_id)
         if not existing:
             raise ValueError(f"表不存在: {table_id}")
@@ -70,6 +74,9 @@ class TableService:
         existing.name = name
         existing.comment = comment.strip()
         existing.columns = columns
+        # 如果调用方传了 fk/index DDL 就更新,否则保留原有
+        existing.fk_ddl_text = fk_ddl_text if fk_ddl_text is not None else existing.fk_ddl_text
+        existing.index_ddl_text = index_ddl_text if index_ddl_text is not None else existing.index_ddl_text
         self.repo.update(existing)
         return self.repo.get(table_id)
 

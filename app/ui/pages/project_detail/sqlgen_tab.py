@@ -24,7 +24,7 @@ from app.ui.dialogs import SqlSnippetDialog
 from app.services.registry import reg
 from app.core.sqlgen import (
     generate_insert, generate_delete, generate_copy, generate_csv_export,
-    generate_export_insert,
+    generate_export_insert, generate_create,
 )
 
 
@@ -109,6 +109,8 @@ class SqlGenTab(QWidget):
         op_label = QLabel(tr("sqlgen_tab.ops"))
         op_label.setStyleSheet("font-weight: 600;")
         ll.addWidget(op_label)
+        self.op_create = QCheckBox("CREATE TABLE DDL")
+        self.op_create.setToolTip(tr("sqlgen_tab.op_create.tip"))
         self.op_insert = QCheckBox("INSERT")
         self.op_delete = QCheckBox("DELETE")
         self.op_import = QCheckBox("Import CSV/TSV")
@@ -125,6 +127,7 @@ class SqlGenTab(QWidget):
         ei_row.addWidget(self.ei_link_combo)
         ei_row.addStretch()
 
+        ll.addWidget(self.op_create)
         ll.addWidget(self.op_insert)
         ll.addWidget(self.op_delete)
         ll.addLayout(ei_row)
@@ -457,6 +460,7 @@ class SqlGenTab(QWidget):
             )
             return
         if not any([
+            self.op_create.isChecked(),
             self.op_insert.isChecked(),
             self.op_delete.isChecked(),
             self.op_import.isChecked(),
@@ -476,6 +480,14 @@ class SqlGenTab(QWidget):
         for t in tables:
             cols = [c.name for c in t.columns]
             pk_col = t.columns[0].name if t.columns else "id"
+            if self.op_create.isChecked():
+                # CREATE TABLE DDL + (可选) FK DDL + (可选) INDEX DDL
+                lines.append(generate_create(
+                    table=t.name,
+                    raw_ddl=t.ddl_text,
+                    fk_ddl=t.fk_ddl_text,
+                    index_ddl=t.index_ddl_text,
+                ))
             if self.op_insert.isChecked():
                 lines.append(generate_insert(t.name, cols))
             if self.op_delete.isChecked():

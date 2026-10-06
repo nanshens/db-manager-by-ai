@@ -1,7 +1,6 @@
 {
   "app.name": "DBManager",
   "app.subtitle": "数据库管理工具",
-
   "nav.dashboard": "仪表盘",
   "nav.projects": "项目",
   "nav.sqllib": "常用 SQL",
@@ -9,7 +8,6 @@
   "nav.file_convert": "文件转换",
   "nav.db_links": "DB 链接",
   "nav.settings": "设置",
-
   "action.new": "新建",
   "action.edit": "编辑",
   "action.delete": "删除",
@@ -24,7 +22,6 @@
   "action.import": "导入",
   "action.export": "导出",
   "action.add": "添加",
-
   "home.welcome": "欢迎使用 DBManager",
   "home.subtitle": "管理你的项目 / 表结构 / 数据版本 / SQL 库 / Excel 解析模板",
   "home.stat.projects": "项目数",
@@ -35,13 +32,11 @@
   "home.recent_snippets": "最近使用的 SQL",
   "home.no_recent": "暂无记录",
   "home.no_projects": "还没有项目,点击下方按钮创建第一个",
-
   "projects.title": "项目",
   "projects.new": "新建项目",
   "projects.search_placeholder": "搜索项目名...",
   "projects.empty.title": "还没有项目",
   "projects.empty.desc": "创建你的第一个项目,开始管理表结构和数据",
-
   "project_detail.tabs.tables": "表结构",
   "project_detail.tabs.versions": "数据版本",
   "project_detail.tabs.sqlgen": "SQL 生成器",
@@ -49,7 +44,6 @@
   "project_detail.tabs.overview": "概览",
   "project_detail.created": "创建于",
   "project_detail.updated": "更新于",
-
   "sqllib.title": "常用 SQL 库",
   "sqllib.search_placeholder": "搜索标题 / SQL 内容 / 标签...",
   "sqllib.new": "新建 SQL",
@@ -65,7 +59,6 @@
   "sqllib.empty.desc": "保存你常用的 SQL,以后一键复制",
   "sqllib.empty.search.title": "没找到匹配的 SQL",
   "sqllib.empty.search.desc": "换个关键词,或清空筛选条件试试",
-
   "excel_tpl.title": "Excel 解析模板",
   "excel_tpl.subtitle": "管理\"配置 sheet + 多数据 sheet\"模式的解析规则",
   "excel_tpl.new": "新建模板",
@@ -77,9 +70,6 @@
   "excel_tpl.col.config_sheet": "配置 sheet",
   "excel_tpl.col.rows": "header/data 行",
   "excel_tpl.col.usage": "使用",
-  "excel_tpl.action.apply": "应用",
-  "excel_tpl.action.duplicate": "复制",
-
   "settings.title": "设置",
   "settings.appearance": "外观",
   "settings.theme": "主题",
@@ -97,7 +87,6 @@
   "settings.about": "关于",
   "settings.about.version": "版本",
   "settings.about.desc": "自用桌面数据库管理工具",
-
   "common.loading": "加载中...",
   "common.empty": "暂无数据",
   "common.coming_soon": "该功能开发中",
@@ -108,18 +97,15 @@
   "common.more": "更多",
   "common.total": "共",
   "common.items": "条",
-
   "toast.copied": "已复制到剪贴板",
   "toast.saved": "保存成功",
   "toast.deleted": "删除成功",
   "toast.error": "操作失败",
   "toast.coming_soon": "功能开发中,敬请期待",
-
   "action.create": "创建",
   "action.confirm_delete": "确认删除",
   "action.select_all": "全选",
   "action.deselect_all": "反选",
-
   "dlg.new_project.title": "新建项目",
   "dlg.edit_project.title": "编辑项目",
   "dlg.project.name": "项目名",
@@ -128,7 +114,6 @@
   "dlg.project.desc.placeholder": "项目的简要说明(可选)",
   "dlg.project.color": "标签颜色",
   "dlg.project.color.pick": "选择颜色",
-
   "dlg.column.title": "编辑列",
   "dlg.column.name": "列名",
   "dlg.column.type": "类型",
@@ -139,7 +124,6 @@
   "dlg.column.error.name_required": "列名不能为空",
   "dlg.column.error.duplicate": "列名重复",
   "dlg.column.error.invalid_name": "列名不合法(字母/下划线开头,只含字母数字下划线)",
-
   "dlg.new_table.title": "新建表",
   "dlg.edit_table.title": "编辑表",
   "dlg.table.name": "表名",
@@ -154,7 +138,6 @@
   "dlg.table.error.cols_required": "至少需要 1 列",
   "dlg.table.error.name_invalid": "表名不合法",
   "dlg.table.error.duplicate": "表名已存在",
-
   "dlg.sql.new": "新建 SQL 片段",
   "dlg.sql.edit": "编辑 SQL 片段",
   "dlg.sql.title": "标题",
@@ -167,17 +150,14 @@
   "dlg.sql.content.tip": "输入 2 字符自动联想 · Tab 键接受 · Esc 关闭",
   "dlg.sql.error.title_required": "标题不能为空",
   "dlg.sql.error.content_required": "SQL 内容不能为空",
-
   "common.confirm": "请确认",
   "common.error": "错误",
   "common.success": "成功",
   "common.warning": "警告",
-
   "dlg.confirm.delete_project.title": "删除项目",
   "dlg.confirm.delete_project.msg": "确认删除项目「{name}」?\n将同时删除该项目的所有表 / 数据版本 / SQL 绑定,此操作不可恢复。",
   "dlg.confirm.delete_table.title": "删除表",
   "dlg.confirm.delete_table.msg": "确认删除表「{name}」?",
-
   "dlg.import_sql.title": "从 SQL 导入表结构",
   "dlg.import_sql.browse_title": "选择 SQL 文件",
   "dlg.import_sql.file": "SQL 文件:",
@@ -194,7 +174,6 @@
   "dlg.import_sql.done": "已导入 {n} 张表",
   "dlg.import_sql.partial": "导入完成: {ok} 张成功,{fail} 张失败",
   "dlg.import_sql.fail": "导入失败",
-
   "tables_tab.title": "表结构",
   "tables_tab.add_table": "添加表",
   "tables_tab.empty.title": "该项目下还没有表",
@@ -207,12 +186,10 @@
   "tables_tab.delete_all.msg": "将删除该项目下所有 {n} 张表(不可恢复),确认继续?",
   "tables_tab.delete_all.done": "已删除 {n} 张表",
   "tables_tab.delete_all.empty": "当前没有表",
-
   "versions_tab.title": "数据版本",
   "versions_tab.new_version": "新建版本",
   "versions_tab.empty.title": "还没有数据版本",
   "versions_tab.empty.desc": "为该表上传 CSV/TSV/XLSX 文件,创建数据快照",
-
   "sqlgen_tab.title": "SQL 生成器",
   "sqlgen_tab.placeholder": "选择表后开始生成 SQL",
   "sqlgen_tab.tables": "选表(可多选)",
@@ -234,7 +211,6 @@
   "sqlgen_tab.io.dir": "目录",
   "sqlgen_tab.io.dir.placeholder": "留空只用文件名",
   "sqlgen_tab.io.dir.tip": "默认空 → 只生成 \"{t_name}.{fmt}\";填了 → \"{dir}/{t_name}.{fmt}\"",
-
   "file_convert.title": "文件转换",
   "file_convert.subtitle": "TSV ↔ CSV 互转,支持换行符策略(关键:LF/CRLF 不丢)",
   "file_convert.source": "源文件:",
@@ -257,12 +233,9 @@
   "file_convert.src_not_exist": "源文件不存在",
   "file_convert.browse_src": "选择源文件",
   "file_convert.browse_dst": "选择目标文件",
-
   "action.browse": "浏览",
   "action.open": "打开",
-
   "versions_tab.no_tables": "请先在该项目下创建至少一张表,再新建数据版本",
-
   "dlg.version.title": "新建数据版本",
   "dlg.version.name": "版本名",
   "dlg.version.desc": "描述",
@@ -308,7 +281,6 @@
   "versions_tab.check.missing": "表里有但文件里没有: {cols}",
   "versions_tab.check.extra": "文件里有但表里没有: {cols}",
   "versions_tab.check.ok": "列名和列数全部匹配",
-
   "diff.source_a": "数据源 A:",
   "diff.source_b": "数据源 B:",
   "diff.source.title": "数据源",
@@ -330,10 +302,6 @@
   "diff.src.choose_template": "选择解析模板",
   "diff.src.choose_excel": "选择 Excel 文件",
   "diff.src.choose_version": "选择数据版本",
-  "diff.mapping.title": "表匹配(A → B,自动按同名)",
-  "diff.mapping.empty_left": "左侧还没选源",
-  "diff.mapping.empty_right": "右侧还没选源",
-  "diff.mapping.hint": "左 {n_a} 张表,右 {n_b} 张表,自动匹配 {n_auto} 张;未匹配的请手动选 B 表或跳过",
   "diff.mapping.skip": "— 跳过 —",
   "diff.match_mode": "判别条件:",
   "diff.match_mode.all": "全列相等",
@@ -344,7 +312,6 @@
   "diff.no_a_tables": "左侧没有可用的表",
   "diff.no_a_cols": "找不到左侧 A 表的列(项目里没建对应表)",
   "diff.error.no_sources": "两侧都要有数据源才能对比",
-  "diff.error.no_pairs": "没有配对的表 — 请在表匹配区选 B 表或跳过",
   "diff.error.no_cols": "选「指定列相等」模式时,需要先点「选列…」选择至少一列",
   "diff.row.pick_cols": "选列…",
   "diff.row.expand": "展开配置",
@@ -382,7 +349,6 @@
   "diff.result.missing_a": "多(A 有 B 无)",
   "diff.result.missing_b": "缺(B 有 A 无)",
   "diff.result.added": "新增",
-  "diff.result.removed": "缺少",
   "diff.result.unchanged": "未变",
   "diff.result.diff_text": "差分摘要",
   "diff.pk": "主键:",
@@ -396,25 +362,17 @@
   "dlg.version.warn.unmatched_title": "未匹配的文件",
   "dlg.version.warn.unmatched": "有 {n} 个文件未匹配到任何表:\n{files}\n\n这些文件将不会导入此次数据版本,只导入已匹配的。继续?",
   "dlg.version.warn.unmatched_more": "\n(还有 {extra} 个…)",
-  "diff.mapping.title": "表匹配(A → B)",
-  "diff.mapping.skip": "— 跳过 —",
-  "diff.mapping.hint": "左 {n_a} 个表,右 {n_b} 个表,自动匹配 {n_auto} 个;未匹配的行请手动选择或跳过。",
-  "diff.error.no_pairs": "请至少配置一对要对比的表",
   "diff.error.missing_left": "左文件不存在: {path}",
   "diff.error.missing_right": "右文件不存在: {path}",
   "diff.error.unsupported_left": "左文件格式不支持: {path}",
   "diff.error.unsupported_right": "右文件格式不支持: {path}",
   "diff.warn.skipped": "已跳过 {n} 对无效文件(路径不存在或格式不支持)",
   "diff.result.overview": "概览",
-  "diff.result.added": "新增",
-  "diff.result.removed": "删除",
-  "diff.result.modified": "修改",
   "diff.result.col.pair": "表对",
   "diff.result.col.key": "主键",
   "diff.result.col.left": "左",
   "diff.result.col.right": "右",
   "diff.browse_title": "选择数据文件",
-
   "dlg.compare.new": "新建对比配置",
   "dlg.compare.edit": "编辑对比配置",
   "dlg.compare.name": "配置名",
@@ -427,7 +385,6 @@
   "dlg.compare.is_default": "设为该表默认配置",
   "dlg.compare.error.name_required": "配置名不能为空",
   "dlg.compare.error.pk_required": "至少需要 1 个主键列",
-
   "dlg.excel.new": "新建 Excel 解析模板",
   "dlg.excel.edit": "编辑 Excel 解析模板",
   "dlg.excel.name": "模板名",
@@ -443,10 +400,6 @@
   "dlg.excel.error.tn_col_required": "表名列不能为空",
   "dlg.excel.error.sn_col_required": "Sheet 名列不能为空",
   "dlg.excel.error.data_before_header": "数据起始行必须 >= header 行",
-
-  "excel_tpl.action.duplicate": "复制模板",
-  "excel_tpl.action.apply": "应用模板",
-
   "dlg.excel_parse.title": "Excel 解析预览",
   "dlg.excel_parse.file": "Excel 文件",
   "dlg.excel_parse.config_sheet": "配置 sheet",
@@ -454,12 +407,9 @@
   "dlg.excel_parse.tables": "解析出的表",
   "dlg.excel_parse.no_file": "请先选择 Excel 文件",
   "dlg.excel_parse.errors": "解析时发现以下问题:",
-
   "projects.empty.search.title": "没有匹配的项目",
   "projects.empty.search.desc": "试试其他关键词",
-
   "common.info": "提示",
-
   "db_link.title": "DB 链接管理",
   "db_link.description.hint": "保存 db 连接信息(postgres / mysql / oracle),供 SQL 生成器选 db_link 生成 pg_dump / mysqldump / expdp 命令,把表数据导出为 INSERT SQL。",
   "db_link.search_placeholder": "搜索链接名 / 类型",
@@ -559,5 +509,28 @@
   "excel_parse.clear.tip": "清空已选文件 + 解析结果(保留模板)",
   "excel_parse.clear.done": "已清空",
   "sqllib.project_filter_global": "全局",
-  "nav.excel_parse": "Excel 解析"
+  "nav.excel_parse": "Excel 解析",
+  "diff.result.removed": "删除",
+  "diff.mapping.title": "表匹配(A → B)",
+  "diff.mapping.empty_left": "左侧还没选源",
+  "diff.mapping.empty_right": "右侧还没选源",
+  "diff.mapping.hint": "左 {n_a} 个表,右 {n_b} 个表,自动匹配 {n_auto} 个;未匹配的行请手动选择或跳过。",
+  "excel_tpl.action.apply": "应用模板",
+  "excel_tpl.action.duplicate": "复制模板",
+  "diff.error.no_pairs": "请至少配置一对要对比的表",
+  "sqlgen_tab.op_create.tip": "输出 CREATE TABLE DDL(含该表的 FOREIGN KEY / INDEX,如果有)",
+  "tables_tab.ddl_tab.create": "CREATE TABLE",
+  "tables_tab.ddl_tab.fk": "FOREIGN KEY",
+  "tables_tab.ddl_tab.index": "INDEX",
+  "dlg.import_sql.kind.create": "CREATE TABLE",
+  "dlg.import_sql.kind.fk": "外键 DDL",
+  "dlg.import_sql.kind.index": "INDEX DDL",
+  "dlg.import_sql.file.placeholder.multi": "选多个 .sql 文件,用 ; 或换行分隔",
+  "dlg.import_sql.file.tip": "支持多选,会自动合并所有文件后解析",
+  "dlg.import_sql.ddl_paste.placeholder": "把 {kind} 语句贴到这里(支持多条 ALTER TABLE / CREATE INDEX,分号分隔)",
+  "dlg.import_sql.paste_label": "粘贴",
+  "dlg.import_sql.preview_title": "DDL 预览",
+  "dlg.import_sql.no_target_selected": "请为每条 DDL 至少选一个目标表",
+  "dlg.import_sql.fk_done": "已写入外键 DDL 到 {n} 张表",
+  "dlg.import_sql.index_done": "已写入 INDEX DDL 到 {n} 张表"
 }

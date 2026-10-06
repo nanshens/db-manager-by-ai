@@ -41,12 +41,35 @@ def generate_delete(table: str, pk_column: str = "id") -> str:
     return f"DELETE FROM {_quote_ident(table)} WHERE {_quote_ident(pk_column)} = ?;"
 
 
+def generate_create(table: str, raw_ddl: str = "", fk_ddl: str = "", index_ddl: str = "") -> str:
+    """生成 CREATE DDL 文本块。
+
+    - raw_ddl 非空 → 直接使用原 CREATE TABLE 文本(可能含 ; 收尾,直接输出)
+    - raw_ddl 为空 → 抛错(由调用方在生成前自行构建,本函数不重造)
+    - fk_ddl / index_ddl 各自独立追加在 CREATE 后(以 `\n\n` 分隔)
+
+    设计原则:不重新生成 CREATE — 用户改完列后 ddl_text 是权威原 CREATE。
+    """
+    parts: list[str] = []
+    raw = (raw_ddl or "").rstrip().rstrip(";").rstrip()
+    if not raw:
+        # 兜底:给个空 CREATE 占位,不至于无声失败
+        parts.append(f"-- ⚠ 表 {table!r} 暂无 CREATE TABLE DDL")
+    else:
+        parts.append(raw + ";")
+    if fk_ddl.strip():
+        parts.append(fk_ddl.strip().rstrip(";") + ";")
+    if index_ddl.strip():
+        parts.append(index_ddl.strip().rstrip(";") + ";")
+    return "\n\n".join(parts)
+
+
 # ---------------------------------------------------------------------------
 # COPY (PostgreSQL) — Import / Export CSV/TSV
 # ---------------------------------------------------------------------------
 def _format_options(fmt: str, with_header: bool) -> str:
     """FORMAT csv/HEADER true/DELIMITER E'\\t' 这种 options 字符串。"""
-    parts = [f"FORMAT {fmt}"]
+    parts = [f"FORMAT csv"]
     if with_header:
         parts.append("HEADER")
     if fmt == "tsv":
@@ -71,7 +94,7 @@ def generate_copy(
     cols = list(columns) if with_columns else []
     cols_str = f"({', '.join(_quote_ident(c) for c in cols)})" if cols else ""
     options = _format_options(fmt, with_header)
-    return f"COPY {_quote_ident(table)} {cols_str} FROM '{file_path}' {options};"
+    return f"\COPY {_quote_ident(table)} {cols_str} FROM '{file_path}' {options};"
 
 
 def generate_csv_export(
@@ -86,7 +109,7 @@ def generate_csv_export(
     cols = list(columns) if with_columns else []
     cols_str = f"({', '.join(_quote_ident(c) for c in cols)})" if cols else ""
     options = _format_options(fmt, with_header)
-    return f"COPY {_quote_ident(table)} {cols_str} TO '{file_path}' {options};"
+    return f"\COPY {_quote_ident(table)} {cols_str} TO '{file_path}' {options};"
 
 
 def generate_bulk_insert_pg(table: str, columns: Iterable[str], values: list[list]) -> str:

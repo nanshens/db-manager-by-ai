@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout, QVBoxLayout, QPushButton, QLabel, QFrame, QListWidget,
     QListWidgetItem, QSplitter, QTextEdit, QMessageBox, QSizePolicy,
-    QWidget, QLineEdit, QComboBox,
+    QWidget, QLineEdit, QComboBox, QTabWidget,
 )
 import qtawesome as qta
 
@@ -155,20 +155,24 @@ class TablesTab(QWidget):
         self.detail_comment.setWordWrap(True)
         self._right_layout.addWidget(self.detail_comment)
 
-        # DDL preview
-        ddl_label = QLabel(tr("tables_tab.ddl"))
-        ddl_label.setObjectName("Muted")
-        ddl_label.setStyleSheet("font-size: 11px;")
-        self._right_layout.addWidget(ddl_label)
-
-        self.ddl_view = QTextEdit()
-        self.ddl_view.setReadOnly(True)
-        self.ddl_view.setStyleSheet(
-            "font-family: Consolas, monospace; font-size: 12px; "
-            "background: #0b1220; color: #e2e8f0; border: 1px solid #334155; border-radius: 6px;"
-        )
+        # DDL preview  三 tab:CREATE / FOREIGN KEY / INDEX
+        self.ddl_tabs = QTabWidget()
+        self.ddl_tabs.setDocumentMode(True)
+        # CREATE
+        self.ddl_view = self._build_ddl_view()
         self._sql_highlighter = SqlHighlighter(self.ddl_view.document())
-        self._right_layout.addWidget(self.ddl_view, 1)
+        self.ddl_tabs.addTab(self.ddl_view, tr("tables_tab.ddl_tab.create"))
+        # FOREIGN KEY
+        self.fk_view = self._build_ddl_view()
+        self._fk_highlighter = SqlHighlighter(self.fk_view.document())
+        self.ddl_tabs.addTab(self.fk_view, tr("tables_tab.ddl_tab.fk"))
+        # INDEX
+        self.index_view = self._build_ddl_view()
+        self._index_highlighter = SqlHighlighter(self.index_view.document())
+        self.ddl_tabs.addTab(self.index_view, tr("tables_tab.ddl_tab.index"))
+        self._right_layout.addWidget(self.ddl_tabs, 1)
+        # 兼容老代码里用 self.ddl_label 的逻辑(整张表没选中时也要隐藏)
+        self.ddl_label = self.ddl_tabs  # 兼容 alias
 
         # Empty state for right — 纯展示,无按钮(新建走工具栏)
         self.empty = EmptyState(
@@ -185,15 +189,23 @@ class TablesTab(QWidget):
         # Initial state
         self.detail_header.hide()
         self.detail_comment.hide()
-        self.ddl_view.hide()
-        self.ddl_label = ddl_label
-        self.ddl_label.hide()
+        self.ddl_tabs.hide()
 
         self.splitter.addWidget(left)
         self.splitter.addWidget(right)
         self.splitter.setStretchFactor(0, 0)
         self.splitter.setStretchFactor(1, 1)
         self.splitter.setSizes([240, 600])
+
+    def _build_ddl_view(self) -> QTextEdit:
+        """返回一个只读 QTextEdit(深底色,等宽字体),用于展示 DDL"""
+        view = QTextEdit()
+        view.setReadOnly(True)
+        view.setStyleSheet(
+            "font-family: Consolas, monospace; font-size: 12px; "
+            "background: #0b1220; color: #e2e8f0; border: 1px solid #334155; border-radius: 6px;"
+        )
+        return view
 
     def retranslate(self) -> None:
         self.add_btn.setText(tr("tables_tab.add_table"))
@@ -208,7 +220,10 @@ class TablesTab(QWidget):
         else:
             self.empty.title_label.setText(tr("tables_tab.empty.title"))
             self.empty.desc_label.setText(tr("tables_tab.empty.desc"))
-        self.ddl_label.setText(tr("tables_tab.ddl"))
+        # ddl_tabs 三个 tab 的标题也跟随语言切换更新
+        self.ddl_tabs.setTabText(0, tr("tables_tab.ddl_tab.create"))
+        self.ddl_tabs.setTabText(1, tr("tables_tab.ddl_tab.fk"))
+        self.ddl_tabs.setTabText(2, tr("tables_tab.ddl_tab.index"))
 
     def showEvent(self, event):
         # 跨 tab 同步:从其他 tab(SQL 生成器等)创建/修改 tag 后,切到本 tab 时自动 refresh
@@ -295,16 +310,14 @@ class TablesTab(QWidget):
             self.empty.show()
             self.detail_header.hide()
             self.detail_comment.hide()
-            self.ddl_view.hide()
-            self.ddl_label.hide()
+            self.ddl_tabs.hide()
             return
         self.empty.hide()
         if n_show == 0:
             # 有表但被过滤完了 — 给个"无匹配"提示
             self.detail_header.hide()
             self.detail_comment.hide()
-            self.ddl_view.hide()
-            self.ddl_label.hide()
+            self.ddl_tabs.hide()
             self.empty.show()
             self.empty.title_label.setText(tr("tables_tab.empty.filtered.title"))
             self.empty.desc_label.setText(tr("tables_tab.empty.filtered.desc"))
@@ -396,8 +409,7 @@ class TablesTab(QWidget):
             self.empty.show()
             self.detail_header.hide()
             self.detail_comment.hide()
-            self.ddl_view.hide()
-            self.ddl_label.hide()
+            self.ddl_tabs.hide()
             return
         tid = items[0].data(Qt.ItemDataRole.UserRole)
         t = reg().table_service.get(tid)
@@ -409,11 +421,12 @@ class TablesTab(QWidget):
     def _show_detail(self, t: Table) -> None:
         self.detail_header.show()
         self.detail_comment.show()
-        self.ddl_view.show()
-        self.ddl_label.show()
+        self.ddl_tabs.show()
         self.detail_name.setText(t.name)
         self.detail_comment.setText(t.comment or "")
         self.ddl_view.setPlainText(t.ddl_text or "")
+        self.fk_view.setPlainText(t.fk_ddl_text or "")
+        self.index_view.setPlainText(t.index_ddl_text or "")
 
     def _on_add(self) -> None:
         if self._project_id is None:
@@ -483,37 +496,99 @@ class TablesTab(QWidget):
             QMessageBox.warning(self, tr("common.error"), str(e))
 
     def _on_import_sql(self) -> None:
-        """从 SQL 文件批量导入表结构。"""
+        """从 SQL 文件批量导入表结构 / 外键 / INDEX DDL。"""
         if self._project_id is None:
             return
-        dlg = ImportSqlDialog(parent=self, default_dialect="postgres")
+        # 把项目下已有表名传进去(FK / INDEX 模式 combo 选)
+        existing_names = [t.name for t in self._all_tables]
+        dlg = ImportSqlDialog(
+            parent=self,
+            default_dialect="postgres",
+            existing_table_names=existing_names,
+        )
         if dlg.exec() != dlg.DialogCode.Accepted:
             return
-        selected = dlg.get_selected_tables()
-        if not selected:
-            return
 
-        ok, fail, first_err = 0, 0, ""
-        for pt in selected:
-            try:
-                cols = [
-                    Column(
-                        name=c.name, type=c.type,
-                        nullable=c.nullable, default=c.default,
-                        pk=c.pk, comment=c.comment,
+        kind = dlg.get_import_kind()
+        if kind == "create":
+            selected = dlg.get_selected_tables()
+            if not selected:
+                return
+            ok, fail, first_err = 0, 0, ""
+            for pt in selected:
+                try:
+                    cols = [
+                        Column(
+                            name=c.name, type=c.type,
+                            nullable=c.nullable, default=c.default,
+                            pk=c.pk, comment=c.comment,
+                        )
+                        for c in pt.columns
+                    ]
+                    reg().table_service.create(
+                        self._project_id, pt.name, "", cols,
                     )
-                    for c in pt.columns
-                ]
-                reg().table_service.create(
-                    self._project_id, pt.name, "", cols,
+                    ok += 1
+                except Exception as e:
+                    fail += 1
+                    if not first_err:
+                        first_err = f"{pt.name}: {e}"
+            if fail == 0:
+                show_toast(tr("dlg.import_sql.done").format(n=ok), "success")
+            else:
+                show_toast(
+                    tr("dlg.import_sql.partial").format(ok=ok, fail=fail),
+                    "warning", 4000,
                 )
+                if first_err:
+                    QMessageBox.warning(
+                        self, tr("dlg.import_sql.fail"), first_err
+                    )
+        elif kind == "fk":
+            self._apply_ddl_to_tables(
+                dlg.get_fk_ddls(),
+                field_name="fk_ddl_text",
+                toast_key="dlg.import_sql.fk_done",
+            )
+        else:  # index
+            self._apply_ddl_to_tables(
+                dlg.get_index_ddls(),
+                field_name="index_ddl_text",
+                toast_key="dlg.import_sql.index_done",
+            )
+        self.refresh()
+
+    def _apply_ddl_to_tables(self, ddls: dict[str, str], field_name: str, toast_key: str) -> None:
+        """把 FK / INDEX DDL 追加到对应表的对应字段(append 而不是覆盖)。
+
+        ddls: {table_name: sql_text}
+        field_name: 'fk_ddl_text' or 'index_ddl_text'
+        """
+        ok, fail, first_err = 0, 0, ""
+        for table_name, sql_text in ddls.items():
+            t = next((x for x in self._all_tables if x.name == table_name), None)
+            if t is None:
+                fail += 1
+                if not first_err:
+                    first_err = f"{table_name}: 表不存在"
+                continue
+            try:
+                # 追加而非覆盖(用户可能多次导入)
+                existing = getattr(t, field_name) or ""
+                merged = (existing.rstrip(";") + ";\n\n" + sql_text.strip().rstrip(";").lstrip() + ";").strip(";\n ")
+                # update service 只能改 name/comment/columns,所以这里直接走 repo
+                if field_name == "fk_ddl_text":
+                    t.fk_ddl_text = merged
+                else:
+                    t.index_ddl_text = merged
+                reg().table_repo.update(t)
                 ok += 1
             except Exception as e:
                 fail += 1
                 if not first_err:
-                    first_err = f"{pt.name}: {e}"
+                    first_err = f"{table_name}: {e}"
         if fail == 0:
-            show_toast(tr("dlg.import_sql.done").format(n=ok), "success")
+            show_toast(tr(toast_key).format(n=ok), "success")
         else:
             show_toast(
                 tr("dlg.import_sql.partial").format(ok=ok, fail=fail),
